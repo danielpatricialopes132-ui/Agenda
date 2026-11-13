@@ -5,43 +5,44 @@ Documento vivo de sincronização entre o desenvolvedor humano e os agentes de I
 ---
 
 ## [State]
-`05 - Workflow GitHub Actions e Pipeline de CI/CD Concluídos`
+`06 - Dashboard de Setup e Onboarding (src/setup-ui.ts) Concluído`
 
 ---
 
 ## [Context]
-Todo o ciclo de engenharia de software foi concluído: persistência de autenticação do Baileys no Supabase, processamento NLP de mensagens de obra com Google Gemini, deduplicação em banco, relatórios programados (Segunda/Terça-Sexta), graceful shutdown de 60 segundos e pipeline automatizado no GitHub Actions a cada 3 horas com trava de concorrência e Quality Gates mandatórios.
+O assistente de obras do ecossistema GADAP Hub possui agora um **Dashboard Visual de Setup** (`src/setup-ui.ts`). Esta interface local Express + Tailwind CSS permite ao gestor ou desenvolvedor escanear o QR Code de forma amigável no navegador e obter a listagem de todos os IDs dos grupos de WhatsApp para configuração da variável `OBRA_GROUP_ID`.
 
 ---
 
 ## [Completed]
 - [x] **Passo 1**: Setup inicial, criação de `package.json`, `tsconfig.json`, `AGENTS.md` e `HANDOFF.md`.
-- [x] **Passo 2**: Implementação do adaptador `src/lib/useSupabaseAuthState.ts` com suporte a `BufferJSON`, cache em memória (`Map`) e persistência no Supabase.
-- [x] **Passo 3**: Implementação do processador de IA em `src/lib/aiProcessor.ts` com `gemini-1.5-flash`, schema JSON e suporte à data base de referência.
+- [x] **Passo 2**: Implementação do adaptador `src/lib/useSupabaseAuthState.ts` com persistência remota no Supabase e cache em memória.
+- [x] **Passo 3**: Implementação do processador de IA em `src/lib/aiProcessor.ts` com Gemini 1.5 Flash e schema JSON restrito.
 - [x] **Passo 4**: Consolidação do motor principal em `src/index.ts` (deduplicação, reação `📅`, motor de relatórios periódicos e graceful shutdown aos 60s).
-- [x] **Passo 5**: Finalização e validação do workflow do GitHub Actions em `.github/workflows/bot-cron.yml`:
-  - Agendamento cron a cada 3 horas (`0 */3 * * *`).
-  - Disparo manual habilitado (`workflow_dispatch`).
-  - Trava de concorrência com `concurrency: group: gadap-whatsapp-bot`.
-  - Quality Gate integrado no runner (`npx tsc --noEmit`).
-  - Mapeamento das secrets de produção e fuso `TZ: 'America/Sao_Paulo'`.
+- [x] **Passo 5**: Workflow do GitHub Actions em `.github/workflows/bot-cron.yml` com concorrência e cron a cada 3h.
+- [x] **Passo 6 (Onboarding UI)**: Implementação do arquivo `src/setup-ui.ts`:
+  - Servidor Express na porta 3000 com rota principal `/` e API `/api/status`.
+  - Integração Baileys via `useSupabaseAuthState` convertendo o QR Code para base64 com `qrcode.toDataURL()`.
+  - Captura e listagem dos grupos participantes com `sock.groupFetchAllParticipating()`.
+  - Interface moderna responsiva com Tailwind CSS, polling dinâmico a cada 2s e botão de copiar ID para clipboard.
+  - Script `"setup:ui": "tsx src/setup-ui.ts"` adicionado no `package.json`.
 
 ---
 
 ## [Pending / Next Steps]
-1. [ ] **Configuração das Secrets no GitHub**:
+1. [ ] **Executar o Dashboard Localmente**:
+   Executar `npm run setup:ui` e abrir `http://localhost:3000` para escanear o QR Code e copiar o ID do grupo de obra desejado.
+2. [ ] **Configurar Secrets no GitHub**:
    Adicionar no repositório (`Settings > Secrets and variables > Actions`):
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
    - `GEMINI_API_KEY`
-   - `OBRA_GROUP_ID`
+   - `OBRA_GROUP_ID` (obtido no Dashboard)
    - `OBRA_ID` (opcional, padrão `obra_principal`)
-2. [ ] **Criação da tabela de controle no Supabase**:
+3. [ ] **Criação da tabela de controle no Supabase**:
    Executar no SQL Editor do Supabase a tabela `disparos_executados` para idempotência dos relatórios diários/semanais.
-3. [ ] **Primeiro Login / Pareamento**:
-   Executar `npm start` em terminal local uma única vez para escanear o QR Code impresso e persistir as credenciais na tabela `baileys_auth_state`.
 
 ---
 
 ## [Known Issues / Blockers]
-- Nenhuma pendência técnica de código. Aguardando apenas configuração de Secrets e scan inicial do QR Code pelo usuário.
+- Nenhuma pendência técnica. O pareamento visual está pronto para execução pelo usuário.
