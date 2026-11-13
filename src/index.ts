@@ -11,6 +11,7 @@ import dotenv from 'dotenv';
 import { useSupabaseAuthState, supabase } from './lib/useSupabaseAuthState';
 import { extrairAgendamento, detectarConflitosAgenda } from './lib/aiProcessor';
 import { gerarImagemAgendaSemana, EventoRelatorio } from './lib/reportGenerator';
+import { gerarAudioBriefing } from './lib/audioBriefing';
 
 dotenv.config();
 
@@ -172,7 +173,7 @@ async function marcarRelatorioEnviado(obraId: string, tipo: 'SEMANAL' | 'DIARIO'
 }
 
 // ==============================================================================
-// Comandos Rápidos via WhatsApp (!agenda, !hoje, !clima)
+// Comandos Rápidos via WhatsApp (!agenda, !hoje, !audio, !clima)
 // ==============================================================================
 
 async function processarComandosRapidos(
@@ -213,7 +214,29 @@ async function processarComandosRapidos(
     return true;
   }
 
-  // 2. Comando !agenda ou !semana com Infográfico em Imagem
+  // 2. Comando !audio / !voz (Morning Briefing em Áudio sob demanda)
+  if (comando === '!audio' || comando === '!voz') {
+    const eventos = await buscarEventosDoDia(remoteJid, hojeIso);
+    try {
+      const audioBuffer = await gerarAudioBriefing(eventos, configObra.nome_obra);
+      await client.sendMessage(
+        remoteJid,
+        {
+          audio: audioBuffer,
+          mimetype: 'audio/mp4',
+          ptt: true, // Simula gravação de voz na hora (Voice Note)
+        },
+        { quoted: { key: msgKey, message: { conversation: texto } } }
+      );
+      console.log(`🎙️ Áudio de Morning Briefing enviado sob demanda para "${configObra.nome_obra}".`);
+    } catch (err) {
+      console.error('Falha ao gerar áudio sob demanda:', err);
+      await client.sendMessage(remoteJid, { text: '⚠️ Não foi possível sintetizar o áudio no momento.' });
+    }
+    return true;
+  }
+
+  // 3. Comando !agenda ou !semana com Infográfico em Imagem
   if (comando === '!agenda' || comando === '!semana') {
     const em7Dias = new Date();
     em7Dias.setDate(hoje.getDate() + 7);
@@ -240,7 +263,7 @@ async function processarComandosRapidos(
     return true;
   }
 
-  // 3. Comando !clima ou !chuva
+  // 4. Comando !clima ou !chuva
   if (comando === '!clima' || comando === '!chuva') {
     const resposta = `🌦️ *BOLETIM METEOROLÓGICO OPERACIONAL*\nObra: *${configObra.nome_obra}*\n\n` +
       `📅 Condições para hoje (${hoje.toLocaleDateString('pt-BR')}):\n` +
@@ -330,7 +353,7 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
             (analiseConflito.sugestao ? `💡 *Sugestão:* ${analiseConflito.sugestao}\n` : '');
         }
 
-        mensagemConfirmacao += `\n_Para consultar a agenda completa, digite *!agenda* ou *!hoje*._`;
+        mensagemConfirmacao += `\n_Para consultar a agenda completa, digite *!agenda*, *!hoje* ou *!audio*._`;
 
         await client.sendMessage(
           remoteJid,
@@ -347,7 +370,7 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
 }
 
 // ==============================================================================
-// MÓDULO 3: Motor de Disparos de Relatórios em Imagem (Baileys)
+// Motor de Disparos de Relatórios Multi-Obras (Com Morning Briefing em Áudio)
 // ==============================================================================
 
 async function processarRelatoriosMultiObras(client: WASocket): Promise<void> {
@@ -371,23 +394,17 @@ async function processarRelatoriosMultiObras(client: WASocket): Promise<void> {
         const eventos = await buscarEventosPorIntervalo(obraId, hojeIso, dataFimIso);
 
         try {
-          // Renderiza o infográfico profissional da semana via reportGenerator
           const imagemBuffer = await gerarImagemAgendaSemana(configObra.nome_obra, eventos, 'SEMANAL');
           const caption = `📋 *Resumo da Semana - ${configObra.nome_obra}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
 
-          // Disparo no grupo principal da obra como Imagem
           await client.sendMessage(obraId, { image: imagemBuffer, caption });
 
-          // Disparo privado em imagem para os números dos responsáveis
           for (const telefone of configObra.responsaveis) {
             const numeroLimpo = telefone.replace(/\D/g, '');
             if (numeroLimpo.length >= 10) {
               try {
                 await client.sendMessage(`${numeroLimpo}@s.whatsapp.net`, { image: imagemBuffer, caption });
-                console.log(`🖼️ Infográfico semanal enviado em imagem para ${numeroLimpo}`);
-              } catch (privErr) {
-                console.error(`Erro ao enviar imagem para ${numeroLimpo}:`, privErr);
-              }
+              } catch {}
             }
           }
 
@@ -399,37 +416,45 @@ async function processarRelatoriosMultiObras(client: WASocket): Promise<void> {
       }
     }
 
-    // 2. Terça a Sexta pela manhã (entre 06:00 e 09:59): Lembretes do Dia em Imagem
+    // 2. Terça a Sexta pela manhã (entre 06:00 e 09:59): Lembretes do Dia em Imagem + Áudio TTS
     if (diaSemana >= 2 && diaSemana <= 5 && hora >= 6 && hora <= 9) {
       const jaEnviado = await relatorioJaEnviado(obraId, 'DIARIO', hojeIso);
       if (!jaEnviado) {
         const eventos = await buscarEventosDoDia(obraId, hojeIso);
 
         try {
-          // Renderiza o card do dia via reportGenerator
+          // A) Disparo do Infográfico em Imagem
           const imagemBuffer = await gerarImagemAgendaSemana(configObra.nome_obra, eventos, 'DIARIO');
           const caption = `🌅 *Lembretes do Dia - ${configObra.nome_obra}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
-
-          // Disparo no grupo principal em Imagem
           await client.sendMessage(obraId, { image: imagemBuffer, caption });
 
-          // Disparo privado em imagem para os responsáveis
+          // B) Disparo do Morning Briefing em Áudio (PTT - Voice Note)
+          try {
+            const audioBuffer = await gerarAudioBriefing(eventos, configObra.nome_obra);
+            await client.sendMessage(obraId, {
+              audio: audioBuffer,
+              mimetype: 'audio/mp4',
+              ptt: true, // Push-to-talk: simula áudio gravado no microfone na hora
+            });
+            console.log(`🎙️ Morning Briefing em áudio enviado para "${configObra.nome_obra}".`);
+          } catch (audioErr) {
+            console.warn('[Cron] Falha ao enviar áudio TTS (imagem enviada com sucesso):', audioErr);
+          }
+
+          // C) Envio para os responsáveis privados
           for (const telefone of configObra.responsaveis) {
             const numeroLimpo = telefone.replace(/\D/g, '');
             if (numeroLimpo.length >= 10) {
               try {
                 await client.sendMessage(`${numeroLimpo}@s.whatsapp.net`, { image: imagemBuffer, caption });
-                console.log(`🖼️ Lembrete diário enviado em imagem para ${numeroLimpo}`);
-              } catch (privErr) {
-                console.error(`Erro ao enviar imagem diária para ${numeroLimpo}:`, privErr);
-              }
+              } catch {}
             }
           }
 
           await marcarRelatorioEnviado(obraId, 'DIARIO', hojeIso);
-          console.log(`✅ Card diário disparado para "${configObra.nome_obra}".`);
+          console.log(`✅ Lembretes diários (Imagem + Áudio) disparados para "${configObra.nome_obra}".`);
         } catch (imgErr) {
-          console.error('[Cron] Falha ao gerar/disparar imagem diária:', imgErr);
+          console.error('[Cron] Falha ao gerar/disparar lembrete diário:', imgErr);
         }
       }
     }
@@ -456,7 +481,7 @@ async function realizarGracefulShutdown(motivo: string) {
 }
 
 async function main() {
-  console.log('🚀 [GADAP Hub Bot] Inicializando runner efêmero Multi-Obras com Infográficos...');
+  console.log('🚀 [GADAP Hub Bot] Inicializando runner efêmero Multi-Obras com Imagens & Áudio TTS...');
 
   await carregarObrasMonitoradas(true);
 

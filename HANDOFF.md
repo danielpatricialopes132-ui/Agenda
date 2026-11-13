@@ -5,35 +5,29 @@ Documento vivo de sincronização entre o desenvolvedor humano e os agentes de I
 ---
 
 ## [State]
-`09 - Calendário Visual FullCalendar e Relatórios em Imagem Concluídos`
+`10 - Morning Briefing em Áudio (TTS) Concluído`
 
 ---
 
 ## [Context]
-O ecossistema GADAP Hub recebeu duas grandes atualizações corporativas:
-1. Um **Calendário Visual Interativo** integrado via FullCalendar no dashboard local.
-2. Um motor de **Geração de Relatórios em Imagem (PNG)** via `node-html-to-image` estilizado em formato de Timeline corporativa SaaS, com disparos automatizados de imagens no WhatsApp via Baileys.
+O bot do ecossistema GADAP Hub agora gera e envia **áudios nativos (Voice Notes - PTT)** narrando o resumo das entregas e atividades do dia, tanto na rotina do cron matinal quanto sob demanda no WhatsApp pelo comando `!audio` ou `!voz`.
 
 ---
 
 ## [Completed]
-- [x] **Módulo 1: Calendário Visual no Dashboard (`src/setup-ui.ts`)**:
-  - Integração da biblioteca FullCalendar via CDN com tema escuro (Dark Theme) e suporte em português (`pt-br`).
-  - Nova aba **"Visão de Calendário"** no menu principal do dashboard.
-  - Endpoint `GET /api/agenda/:obra_id` formatando os dados no padrão `{ id, title, start, allDay, extendedProps }`.
-  - Seletor de obras dinâmico que redesenha os agendamentos instantaneamente no calendário mensal/semanal.
-- [x] **Módulo 2: Gerador de Infográficos em Imagem (`src/lib/reportGenerator.ts`)**:
-  - Implementação da função `gerarImagemAgendaSemana(obraNome, eventos, tipo)`.
-  - Template HTML renderizado em headless Puppeteer com design em gradientes escuros, nós de timeline neon esmeralda/ciano e tipografia corporativa `Plus Jakarta Sans`.
-  - Retorno em `Buffer` de alta fidelidade PNG.
-- [x] **Módulo 3: Disparo de Imagens no WhatsApp (`src/index.ts`)**:
-  - As rotinas de Cron (semanal e diária) agora enviam a imagem via `client.sendMessage(jid, { image: buffer, caption: "..." })`.
-  - Disparos realizados tanto no grupo da obra quanto individualmente no WhatsApp privado dos responsáveis cadastrados.
-  - Comandos rápidos (`!hoje`, `!agenda`) também respondem com o infográfico em imagem gerado sob demanda.
+- [x] **Módulo 1: Motor de TTS (`src/lib/audioBriefing.ts`)**:
+  - Integração com `google-tts-api` configurado para Português do Brasil (`pt-BR`).
+  - Geração de roteiro dinâmico e amigável: *"Bom dia equipe da [Nome da Obra]! Hoje é [Dia], e aqui está o resumo operacional..."*.
+  - Suporte à divisão automática em blocos de até 200 caracteres com concatenação nativa de Buffers binários.
+- [x] **Módulo 2: Disparo de Áudio Nativo via Baileys (`src/index.ts`)**:
+  - Configuração `{ audio: buffer, mimetype: 'audio/mp4', ptt: true }` simulando áudio gravado no microfone na hora.
+  - Envio integrado na rotina do Cron matinal (Terça a Sexta entre 06:00 e 09:59).
+  - Comando interativo `!audio` ou `!voz` para escutar o briefing sob demanda.
+- [x] **Módulo 3: Validação de Tipos e Build**:
+  - `npx tsc --noEmit` e `npm run build` executados com sucesso.
 
 ---
 
 ## [Pending / Next Steps]
-1. [ ] Acessar `http://localhost:3000` e clicar na aba **"Visão de Calendário"** para navegar pelos agendamentos no FullCalendar.
-2. [ ] Testar no WhatsApp o comando `!agenda` ou `!hoje` para receber o infográfico renderizado em imagem.
-3. [ ] Executar `git push origin main` para atualizar o repositório remoto.
+1. [ ] Testar o comando `!audio` no grupo "Obra Leopoldo" do WhatsApp para ouvir a narração do dia.
+2. [ ] Subir as alterações para o GitHub com `git push origin main`.
