@@ -10,6 +10,7 @@ import dotenv from 'dotenv';
 
 import { useSupabaseAuthState, supabase } from './lib/useSupabaseAuthState';
 import { extrairAgendamento, detectarConflitosAgenda } from './lib/aiProcessor';
+import { gerarImagemAgendaSemana, EventoRelatorio } from './lib/reportGenerator';
 
 dotenv.config();
 
@@ -61,7 +62,7 @@ async function carregarObrasMonitoradas(forcar = false): Promise<Map<string, Obr
 
     obrasCache = novoMapa;
     ultimaAtualizacaoObras = agora;
-    console.log(`[DB Multi-Obras] Cache de obras ativas atualizado: ${obrasCache.size} obras.`);
+    console.log(`[DB Multi-Obras] Cache atualizado: ${obrasCache.size} obras monitoradas.`);
   } catch (err) {
     console.error('[DB Multi-Obras] Exceção ao atualizar cache:', err);
   }
@@ -94,33 +95,33 @@ async function registrarMensagemProcessada(messageId: string, remoteJid: string)
   } catch {}
 }
 
-async function buscarEventosDoDia(obraId: string, dataIso: string) {
+async function buscarEventosDoDia(obraId: string, dataIso: string): Promise<EventoRelatorio[]> {
   try {
     const { data } = await supabase
       .from('agenda_obra')
-      .select('descricao, horario')
+      .select('data_evento, horario, descricao')
       .eq('obra_id', obraId)
       .eq('data_evento', dataIso)
       .order('horario', { ascending: true });
 
-    return data || [];
+    return (data || []) as EventoRelatorio[];
   } catch {
     return [];
   }
 }
 
-async function buscarEventosPorIntervalo(obraId: string, dataInicio: string, dataFim: string) {
+async function buscarEventosPorIntervalo(obraId: string, dataInicio: string, dataFim: string): Promise<EventoRelatorio[]> {
   try {
     const { data } = await supabase
       .from('agenda_obra')
-      .select('*')
+      .select('data_evento, horario, descricao')
       .eq('obra_id', obraId)
       .gte('data_evento', dataInicio)
       .lte('data_evento', dataFim)
       .order('data_evento', { ascending: true })
       .order('horario', { ascending: true });
 
-    return data || [];
+    return (data || []) as EventoRelatorio[];
   } catch {
     return [];
   }
@@ -171,7 +172,7 @@ async function marcarRelatorioEnviado(obraId: string, tipo: 'SEMANAL' | 'DIARIO'
 }
 
 // ==============================================================================
-// Feature 4: Comandos Rápidos via WhatsApp (!agenda, !hoje, !clima)
+// Comandos Rápidos via WhatsApp (!agenda, !hoje, !clima)
 // ==============================================================================
 
 async function processarComandosRapidos(
@@ -185,54 +186,68 @@ async function processarComandosRapidos(
   const hoje = new Date();
   const hojeIso = hoje.toISOString().split('T')[0];
 
-  // 1. Comando !hoje
+  // 1. Comando !hoje com opção de imagem
   if (comando === '!hoje') {
     const eventos = await buscarEventosDoDia(remoteJid, hojeIso);
-    let resposta = `🌅 *AGENDA DE HOJE - ${configObra.nome_obra.toUpperCase()}*\n`;
-    resposta += `Data: *${hoje.toLocaleDateString('pt-BR')}*\n\n`;
-
-    if (eventos.length === 0) {
-      resposta += 'Nenhum agendamento ou entrega programada para hoje. Bom expediente!';
-    } else {
-      eventos.forEach((ev) => {
-        resposta += `⏰ *${ev.horario}* - ${ev.descricao}\n`;
-      });
+    try {
+      const imagemBuffer = await gerarImagemAgendaSemana(configObra.nome_obra, eventos, 'DIARIO');
+      await client.sendMessage(
+        remoteJid,
+        {
+          image: imagemBuffer,
+          caption: `🌅 *Lembretes do Dia - ${configObra.nome_obra}*\nResumo da agenda atualizado. Bom trabalho à equipe!`,
+        },
+        { quoted: { key: msgKey, message: { conversation: texto } } }
+      );
+    } catch {
+      let resposta = `🌅 *AGENDA DE HOJE - ${configObra.nome_obra.toUpperCase()}*\n`;
+      if (eventos.length === 0) {
+        resposta += 'Nenhum agendamento programado para hoje. Bom expediente!';
+      } else {
+        eventos.forEach((ev) => {
+          resposta += `⏰ *${ev.horario}* - ${ev.descricao}\n`;
+        });
+      }
+      await client.sendMessage(remoteJid, { text: resposta }, { quoted: { key: msgKey, message: { conversation: texto } } });
     }
-
-    await client.sendMessage(remoteJid, { text: resposta }, { quoted: { key: msgKey, message: { conversation: texto } } });
     return true;
   }
 
-  // 2. Comando !agenda ou !semana
+  // 2. Comando !agenda ou !semana com Infográfico em Imagem
   if (comando === '!agenda' || comando === '!semana') {
     const em7Dias = new Date();
     em7Dias.setDate(hoje.getDate() + 7);
     const dataFimIso = em7Dias.toISOString().split('T')[0];
-
     const eventos = await buscarEventosPorIntervalo(remoteJid, hojeIso, dataFimIso);
-    let resposta = `📋 *AGENDA DOS PRÓXIMOS 7 DIAS*\nObra: *${configObra.nome_obra}*\n\n`;
 
-    if (eventos.length === 0) {
-      resposta += 'Nenhum evento registrado para os próximos 7 dias.';
-    } else {
-      eventos.forEach((ev: any) => {
-        const [ano, mes, dia] = ev.data_evento.split('-');
-        resposta += `🗓️ *${dia}/${mes}* às *${ev.horario}*\n📌 ${ev.descricao}\n\n`;
+    try {
+      const imagemBuffer = await gerarImagemAgendaSemana(configObra.nome_obra, eventos, 'SEMANAL');
+      await client.sendMessage(
+        remoteJid,
+        {
+          image: imagemBuffer,
+          caption: `📋 *Cronograma da Semana - ${configObra.nome_obra}*\nResumo da agenda atualizado. Bom trabalho à equipe!`,
+        },
+        { quoted: { key: msgKey, message: { conversation: texto } } }
+      );
+    } catch {
+      let resposta = `📋 *AGENDA DOS PRÓXIMOS 7 DIAS - ${configObra.nome_obra}*\n\n`;
+      eventos.forEach((ev) => {
+        resposta += `🗓️ ${ev.data_evento} às ${ev.horario}: ${ev.descricao}\n`;
       });
+      await client.sendMessage(remoteJid, { text: resposta }, { quoted: { key: msgKey, message: { conversation: texto } } });
     }
-
-    await client.sendMessage(remoteJid, { text: resposta }, { quoted: { key: msgKey, message: { conversation: texto } } });
     return true;
   }
 
   // 3. Comando !clima ou !chuva
   if (comando === '!clima' || comando === '!chuva') {
-    const resposta = `🌦️ *ALERTA METEOROLÓGICO DA OBRA*\nObra: *${configObra.nome_obra}*\n\n` +
-      `📅 Previsão para hoje (${hoje.toLocaleDateString('pt-BR')}):\n` +
+    const resposta = `🌦️ *BOLETIM METEOROLÓGICO OPERACIONAL*\nObra: *${configObra.nome_obra}*\n\n` +
+      `📅 Condições para hoje (${hoje.toLocaleDateString('pt-BR')}):\n` +
       `• Céu parcialmente nublado com aberturas de sol\n` +
-      `• Probabilidade de chuva: 20% (Período favorável para concretagem e frentes externas)\n` +
+      `• Probabilidade de chuva: 20% (Favorável para concretagem e frentes externas)\n` +
       `• Vento moderado: ~12 km/h\n\n` +
-      `_Dica operacional: Mantenha lonas plásticas prontas próximo aos agregados e cimento._`;
+      `_Dica operacional: Mantenha agregados e cimento cobertos com lonas plásticas._`;
 
     await client.sendMessage(remoteJid, { text: resposta }, { quoted: { key: msgKey, message: { conversation: texto } } });
     return true;
@@ -272,7 +287,7 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
 
   console.log(`[WhatsApp - ${configObra.nome_obra}]: "${texto}"`);
 
-  // Feature 4: Checa se é um comando rápido (!hoje, !agenda, !clima)
+  // Checa comandos rápidos
   const foiComando = await processarComandosRapidos(texto, remoteJid, configObra, client, msg.key);
   if (foiComando) {
     await registrarMensagemProcessada(messageId, remoteJid);
@@ -287,7 +302,7 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
   if (resultado.is_agendamento && resultado.data_iso && resultado.descricao) {
     console.log(`🎯 [AI - ${configObra.nome_obra}] Agendamento detectado:`, resultado);
 
-    // Feature 3: Detector de Conflitos e Logística
+    // Detector de Conflitos e Logística
     const eventosExistentes = await buscarEventosDoDia(remoteJid, resultado.data_iso);
     const analiseConflito = await detectarConflitosAgenda(
       { descricao: resultado.descricao, horario: resultado.horario },
@@ -298,12 +313,10 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
 
     if (salvo) {
       try {
-        // Reação emoji imediata
         await client.sendMessage(remoteJid, {
           react: { text: analiseConflito.tem_conflito ? '⚠️' : '📅', key: msg.key },
         });
 
-        // Feature 1: Confirmação Ativa no Grupo com Cartão Formatado
         const [ano, mes, dia] = resultado.data_iso.split('-');
         const horarioFmt = resultado.horario || 'Horário comercial (08:00)';
 
@@ -312,7 +325,6 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
           `⏰ *Horário:* ${horarioFmt}\n` +
           `📌 *Compromisso:* ${resultado.descricao}\n`;
 
-        // Se houver conflito logístico, anexa alerta na mensagem
         if (analiseConflito.tem_conflito && analiseConflito.motivo_conflito) {
           mensagemConfirmacao += `\n⚠️ *ALERTA DE CONFLITO LOGÍSTICO:*\n${analiseConflito.motivo_conflito}\n` +
             (analiseConflito.sugestao ? `💡 *Sugestão:* ${analiseConflito.sugestao}\n` : '');
@@ -325,9 +337,8 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
           { text: mensagemConfirmacao },
           { quoted: { key: msg.key, message: { conversation: texto } } }
         );
-        console.log(`✨ Confirmação ativa enviada no grupo "${configObra.nome_obra}"!`);
       } catch (err) {
-        console.error('Erro ao enviar confirmação no WhatsApp:', err);
+        console.error('Erro ao responder agendamento no WhatsApp:', err);
       }
     }
   }
@@ -336,7 +347,7 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
 }
 
 // ==============================================================================
-// Motor de Disparos de Relatórios Multi-Obras
+// MÓDULO 3: Motor de Disparos de Relatórios em Imagem (Baileys)
 // ==============================================================================
 
 async function processarRelatoriosMultiObras(client: WASocket): Promise<void> {
@@ -344,12 +355,12 @@ async function processarRelatoriosMultiObras(client: WASocket): Promise<void> {
   if (obras.size === 0) return;
 
   const agora = new Date();
-  const diaSemana = agora.getDay();
+  const diaSemana = agora.getDay(); // 0: Dom, 1: Seg, 2: Ter, ..., 5: Sex, 6: Sáb
   const hora = agora.getHours();
   const hojeIso = agora.toISOString().split('T')[0];
 
   for (const [obraId, configObra] of obras.entries()) {
-    // 1. Segunda-feira pela manhã: Agenda da Semana
+    // 1. Segunda-feira pela manhã (entre 07:00 e 11:59): Infográfico Semanal em Imagem
     if (diaSemana === 1 && hora >= 7 && hora <= 11) {
       const jaEnviado = await relatorioJaEnviado(obraId, 'SEMANAL', hojeIso);
       if (!jaEnviado) {
@@ -358,62 +369,68 @@ async function processarRelatoriosMultiObras(client: WASocket): Promise<void> {
         const dataFimIso = em5Dias.toISOString().split('T')[0];
 
         const eventos = await buscarEventosPorIntervalo(obraId, hojeIso, dataFimIso);
-        let mensagem = `📋 *AGENDA DA SEMANA - ${configObra.nome_obra.toUpperCase()}*\n_Previsão dos próximos 5 dias de obra:_\n\n`;
 
-        if (eventos.length === 0) {
-          mensagem += 'Nenhum agendamento cadastrado para os próximos dias.\nTenham todos uma excelente semana de trabalho!';
-        } else {
-          eventos.forEach((ev: any) => {
-            const [ano, mes, dia] = ev.data_evento.split('-');
-            mensagem += `🗓️ *${dia}/${mes}* às *${ev.horario}*\n📌 ${ev.descricao}\n\n`;
-          });
-          mensagem += 'Qualquer alteração ou novo fornecedor, favor avisar neste grupo.';
-        }
+        try {
+          // Renderiza o infográfico profissional da semana via reportGenerator
+          const imagemBuffer = await gerarImagemAgendaSemana(configObra.nome_obra, eventos, 'SEMANAL');
+          const caption = `📋 *Resumo da Semana - ${configObra.nome_obra}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
 
-        await client.sendMessage(obraId, { text: mensagem });
+          // Disparo no grupo principal da obra como Imagem
+          await client.sendMessage(obraId, { image: imagemBuffer, caption });
 
-        // Disparo para responsáveis privados
-        for (const telefone of configObra.responsaveis) {
-          const numeroLimpo = telefone.replace(/\D/g, '');
-          if (numeroLimpo.length >= 10) {
-            try {
-              await client.sendMessage(`${numeroLimpo}@s.whatsapp.net`, { text: mensagem });
-            } catch {}
+          // Disparo privado em imagem para os números dos responsáveis
+          for (const telefone of configObra.responsaveis) {
+            const numeroLimpo = telefone.replace(/\D/g, '');
+            if (numeroLimpo.length >= 10) {
+              try {
+                await client.sendMessage(`${numeroLimpo}@s.whatsapp.net`, { image: imagemBuffer, caption });
+                console.log(`🖼️ Infográfico semanal enviado em imagem para ${numeroLimpo}`);
+              } catch (privErr) {
+                console.error(`Erro ao enviar imagem para ${numeroLimpo}:`, privErr);
+              }
+            }
           }
-        }
 
-        await marcarRelatorioEnviado(obraId, 'SEMANAL', hojeIso);
+          await marcarRelatorioEnviado(obraId, 'SEMANAL', hojeIso);
+          console.log(`✅ Infográfico semanal disparado para "${configObra.nome_obra}".`);
+        } catch (imgErr) {
+          console.error('[Cron] Falha ao gerar/disparar imagem semanal:', imgErr);
+        }
       }
     }
 
-    // 2. Terça a Sexta pela manhã: Lembretes do Dia
+    // 2. Terça a Sexta pela manhã (entre 06:00 e 09:59): Lembretes do Dia em Imagem
     if (diaSemana >= 2 && diaSemana <= 5 && hora >= 6 && hora <= 9) {
       const jaEnviado = await relatorioJaEnviado(obraId, 'DIARIO', hojeIso);
       if (!jaEnviado) {
         const eventos = await buscarEventosDoDia(obraId, hojeIso);
-        let mensagem = `🌅 *LEMBRETES DO DIA - ${configObra.nome_obra.toUpperCase()}*\n_Atividades e entregas programadas para hoje:_\n\n`;
 
-        if (eventos.length === 0) {
-          mensagem += 'Nenhum compromisso ou entrega de material prevista para hoje. Bom expediente!';
-        } else {
-          eventos.forEach((ev: any) => {
-            mensagem += `⏰ *${ev.horario}* - ${ev.descricao}\n`;
-          });
-          mensagem += '\nFiquem atentos aos recebimentos e frentes de serviço!';
-        }
+        try {
+          // Renderiza o card do dia via reportGenerator
+          const imagemBuffer = await gerarImagemAgendaSemana(configObra.nome_obra, eventos, 'DIARIO');
+          const caption = `🌅 *Lembretes do Dia - ${configObra.nome_obra}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
 
-        await client.sendMessage(obraId, { text: mensagem });
+          // Disparo no grupo principal em Imagem
+          await client.sendMessage(obraId, { image: imagemBuffer, caption });
 
-        for (const telefone of configObra.responsaveis) {
-          const numeroLimpo = telefone.replace(/\D/g, '');
-          if (numeroLimpo.length >= 10) {
-            try {
-              await client.sendMessage(`${numeroLimpo}@s.whatsapp.net`, { text: mensagem });
-            } catch {}
+          // Disparo privado em imagem para os responsáveis
+          for (const telefone of configObra.responsaveis) {
+            const numeroLimpo = telefone.replace(/\D/g, '');
+            if (numeroLimpo.length >= 10) {
+              try {
+                await client.sendMessage(`${numeroLimpo}@s.whatsapp.net`, { image: imagemBuffer, caption });
+                console.log(`🖼️ Lembrete diário enviado em imagem para ${numeroLimpo}`);
+              } catch (privErr) {
+                console.error(`Erro ao enviar imagem diária para ${numeroLimpo}:`, privErr);
+              }
+            }
           }
-        }
 
-        await marcarRelatorioEnviado(obraId, 'DIARIO', hojeIso);
+          await marcarRelatorioEnviado(obraId, 'DIARIO', hojeIso);
+          console.log(`✅ Card diário disparado para "${configObra.nome_obra}".`);
+        } catch (imgErr) {
+          console.error('[Cron] Falha ao gerar/disparar imagem diária:', imgErr);
+        }
       }
     }
   }
@@ -439,7 +456,7 @@ async function realizarGracefulShutdown(motivo: string) {
 }
 
 async function main() {
-  console.log('🚀 [GADAP Hub Bot] Inicializando runner efêmero Multi-Obras com IA Proativa...');
+  console.log('🚀 [GADAP Hub Bot] Inicializando runner efêmero Multi-Obras com Infográficos...');
 
   await carregarObrasMonitoradas(true);
 

@@ -5,33 +5,35 @@ Documento vivo de sincronização entre o desenvolvedor humano e os agentes de I
 ---
 
 ## [State]
-`08 - Pacote Completo de Evoluções Implementado`
+`09 - Calendário Visual FullCalendar e Relatórios em Imagem Concluídos`
 
 ---
 
 ## [Context]
-O bot do ecossistema GADAP Hub foi expandido com 4 grandes frentes de inteligência operacional de canteiro de obras: confirmações ativas com cartões, visualizador de agenda no dashboard, detector de conflitos logísticos e comandos rápidos via WhatsApp.
+O ecossistema GADAP Hub recebeu duas grandes atualizações corporativas:
+1. Um **Calendário Visual Interativo** integrado via FullCalendar no dashboard local.
+2. Um motor de **Geração de Relatórios em Imagem (PNG)** via `node-html-to-image` estilizado em formato de Timeline corporativa SaaS, com disparos automatizados de imagens no WhatsApp via Baileys.
 
 ---
 
 ## [Completed]
-- [x] **Feature 1: Confirmação Ativa no Grupo do WhatsApp**:
-  - Resposta citada (`quoted message`) com cartão formatado contendo data, horário, resumo do compromisso e nome da obra.
-- [x] **Feature 2: Visualizador da Agenda no Dashboard (`src/setup-ui.ts`)**:
-  - Nova aba **"Agenda de Eventos"** no dashboard com filtros por obra, listagem cronológica e botão de exclusão de eventos.
-  - Endpoints `GET /api/agenda` e `DELETE /api/agenda/:id`.
-- [x] **Feature 3: Alerta de Conflitos e Choques Logísticos (`src/lib/aiProcessor.ts`)**:
-  - Função `detectarConflitosAgenda` que analisa incompatibilidade de espaço e sobreposição de descargas/concretagens no mesmo dia.
-  - Emissão de alerta `⚠️ ALERTA DE CONFLITO LOGÍSTICO` direto na mensagem do WhatsApp com sugestão de ajuste.
-- [x] **Feature 4: Comandos Rápidos via WhatsApp (`!hoje`, `!agenda`, `!clima`)**:
-  - `!hoje`: Resumo imediato dos compromissos do dia.
-  - `!agenda` ou `!semana`: Agenda completa dos próximos 7 dias.
-  - `!clima` ou `!chuva`: Boletim meteorológico operacional para proteção de agregados e planejamento de concretagens.
-- [x] **Tabelas do Supabase (`obras_config`, `agenda_obra`, `disparos_executados`)** ativas e validadas.
+- [x] **Módulo 1: Calendário Visual no Dashboard (`src/setup-ui.ts`)**:
+  - Integração da biblioteca FullCalendar via CDN com tema escuro (Dark Theme) e suporte em português (`pt-br`).
+  - Nova aba **"Visão de Calendário"** no menu principal do dashboard.
+  - Endpoint `GET /api/agenda/:obra_id` formatando os dados no padrão `{ id, title, start, allDay, extendedProps }`.
+  - Seletor de obras dinâmico que redesenha os agendamentos instantaneamente no calendário mensal/semanal.
+- [x] **Módulo 2: Gerador de Infográficos em Imagem (`src/lib/reportGenerator.ts`)**:
+  - Implementação da função `gerarImagemAgendaSemana(obraNome, eventos, tipo)`.
+  - Template HTML renderizado em headless Puppeteer com design em gradientes escuros, nós de timeline neon esmeralda/ciano e tipografia corporativa `Plus Jakarta Sans`.
+  - Retorno em `Buffer` de alta fidelidade PNG.
+- [x] **Módulo 3: Disparo de Imagens no WhatsApp (`src/index.ts`)**:
+  - As rotinas de Cron (semanal e diária) agora enviam a imagem via `client.sendMessage(jid, { image: buffer, caption: "..." })`.
+  - Disparos realizados tanto no grupo da obra quanto individualmente no WhatsApp privado dos responsáveis cadastrados.
+  - Comandos rápidos (`!hoje`, `!agenda`) também respondem com o infográfico em imagem gerado sob demanda.
 
 ---
 
 ## [Pending / Next Steps]
-1. [ ] Testar os comandos rápidos (`!hoje`, `!agenda`, `!clima`) diretamente no grupo "Obra Leopoldo" do WhatsApp.
-2. [ ] Testar envio de uma mensagem com conflito evidente (ex: duas descargas pesadas no mesmo horário) para ver o alerta da IA.
-3. [ ] Subir as alterações com `git push origin main`.
+1. [ ] Acessar `http://localhost:3000` e clicar na aba **"Visão de Calendário"** para navegar pelos agendamentos no FullCalendar.
+2. [ ] Testar no WhatsApp o comando `!agenda` ou `!hoje` para receber o infográfico renderizado em imagem.
+3. [ ] Executar `git push origin main` para atualizar o repositório remoto.

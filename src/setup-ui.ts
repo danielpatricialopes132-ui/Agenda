@@ -186,7 +186,7 @@ app.delete('/api/obras/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Feature 2: API de Gestão da Agenda de Obras
+// GET /api/agenda: Lista geral de agendamentos
 app.get('/api/agenda', async (req: Request, res: Response) => {
   try {
     const obraId = req.query.obra_id as string;
@@ -204,6 +204,44 @@ app.get('/api/agenda', async (req: Request, res: Response) => {
   }
 });
 
+// MÓDULO 1: GET /api/agenda/:obra_id formatado no padrão exigido pelo FullCalendar
+app.get('/api/agenda/:obra_id', async (req: Request, res: Response) => {
+  try {
+    const obraId = req.params.obra_id;
+    const { data, error } = await supabase
+      .from('agenda_obra')
+      .select('*')
+      .eq('obra_id', obraId)
+      .order('data_evento', { ascending: true });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Mapeamento padrão do FullCalendar ({ id, title, start, end, allDay })
+    const eventosFullCalendar = (data || []).map((ev: any) => {
+      const horario = ev.horario && ev.horario.includes(':') ? ev.horario : '08:00';
+      const startDateTime = `${ev.data_evento}T${horario}:00`;
+
+      return {
+        id: ev.id,
+        title: `${horario} - ${ev.descricao}`,
+        start: startDateTime,
+        allDay: !ev.horario,
+        extendedProps: {
+          descricao: ev.descricao,
+          horario: ev.horario,
+          obra_id: ev.obra_id,
+        },
+      };
+    });
+
+    return res.json(eventosFullCalendar);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/agenda/:id', async (req: Request, res: Response) => {
   try {
     const { error } = await supabase.from('agenda_obra').delete().eq('id', req.params.id);
@@ -215,7 +253,7 @@ app.delete('/api/agenda/:id', async (req: Request, res: Response) => {
 });
 
 // ==============================================================================
-// Dashboard Embutido (Frontend com Gestão de Obras + Visualizador de Agenda)
+// Dashboard Embutido (Com Abas: Obras, Lista de Agenda e FullCalendar)
 // ==============================================================================
 app.get('/', (req: Request, res: Response) => {
   const html = `<!DOCTYPE html>
@@ -223,21 +261,35 @@ app.get('/', (req: Request, res: Response) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GADAP Hub - Gestão de Obras & WhatsApp Intelligence</title>
+  <title>GADAP Hub - Gestão de Obras & FullCalendar</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FullCalendar CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Inter', sans-serif; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
     .custom-scroll::-webkit-scrollbar { width: 6px; }
     .custom-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
     .custom-scroll::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 4px; }
+    
+    /* Customização Tema Escuro do FullCalendar */
+    .fc { --fc-border-color: #334155; --fc-page-bg-color: transparent; }
+    .fc-theme-standard th { background: #0f172a; padding: 10px; font-size: 12px; color: #94a3b8; }
+    .fc-theme-standard td { border-color: #1e293b; }
+    .fc-daygrid-day-number { color: #cbd5e1; font-size: 12px; font-weight: 600; padding: 6px !important; }
+    .fc-col-header-cell-cushion { color: #94a3b8; text-transform: uppercase; font-size: 11px; }
+    .fc-event { background: linear-gradient(135deg, #059669, #0d9488); border: none; border-radius: 6px; padding: 3px 6px; font-size: 11px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+    .fc-button-primary { background-color: #1e293b !important; border-color: #334155 !important; font-size: 12px !important; font-weight: 600 !important; border-radius: 8px !important; }
+    .fc-button-primary:hover { background-color: #334155 !important; }
+    .fc-button-active { background-color: #2563eb !important; border-color: #2563eb !important; }
+    .fc-toolbar-title { font-size: 16px !important; font-weight: 700; color: #ffffff; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col py-6 px-4 sm:px-8">
 
-  <!-- Header & Navegação em Abas -->
+  <!-- Header & Navegação em 3 Abas -->
   <header class="w-full max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-800 gap-4">
     <div class="flex items-center space-x-3">
       <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-bold text-slate-950 text-xl shadow-lg shadow-emerald-500/20">
@@ -248,17 +300,20 @@ app.get('/', (req: Request, res: Response) => {
           GADAP Hub
           <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Multi-Obras</span>
         </h1>
-        <p class="text-xs text-slate-400">Inteligência Operacional de Obras via WhatsApp</p>
+        <p class="text-xs text-slate-400">Inteligência Operacional & Calendário de Obras</p>
       </div>
     </div>
 
     <!-- Navegação por Abas -->
-    <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1.5 rounded-xl">
-      <button onclick="trocarAba('obras')" id="tab-obras" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow transition">
+    <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 p-1.5 rounded-xl">
+      <button onclick="trocarAba('obras')" id="tab-obras" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow transition">
         Obras & WhatsApp
       </button>
-      <button onclick="trocarAba('agenda')" id="tab-agenda" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">
-        Agenda de Eventos
+      <button onclick="trocarAba('calendario')" id="tab-calendario" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">
+        Visão de Calendário
+      </button>
+      <button onclick="trocarAba('agenda')" id="tab-agenda" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">
+        Lista de Eventos
       </button>
     </div>
 
@@ -273,7 +328,7 @@ app.get('/', (req: Request, res: Response) => {
 
     <!-- ABA 1: CONFIGURAÇÃO DE OBRAS E WHATSAPP -->
     <div id="conteudo-obras" class="flex-1 flex flex-col">
-      <!-- Tela Desconectado -->
+      <!-- Desconectado -->
       <section id="card-desconectado" class="w-full max-w-md mx-auto my-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl hidden">
         <div class="w-14 h-14 bg-slate-800 rounded-2xl mx-auto flex items-center justify-center mb-4">
           <svg class="w-7 h-7 text-slate-400 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -282,10 +337,10 @@ app.get('/', (req: Request, res: Response) => {
           </svg>
         </div>
         <h2 class="text-lg font-semibold text-white">Conectando ao WhatsApp</h2>
-        <p class="text-xs text-slate-400 mt-2">Carregando credenciais criptográficas remotas no Supabase...</p>
+        <p class="text-xs text-slate-400 mt-2">Carregando credenciais criptográficas do Supabase...</p>
       </section>
 
-      <!-- Tela QR Code -->
+      <!-- QR Code -->
       <section id="card-qr" class="w-full max-w-md mx-auto my-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl hidden">
         <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
           Autenticação Requerida
@@ -295,7 +350,6 @@ app.get('/', (req: Request, res: Response) => {
         <div class="p-3 bg-white rounded-2xl shadow-inner inline-block mx-auto border-4 border-slate-800">
           <img id="qr-img" class="w-64 h-64 rounded-lg block" src="" alt="QR Code WhatsApp" />
         </div>
-        <p class="text-xs text-slate-500 mt-6">Atualização automática a cada ciclo</p>
       </section>
 
       <!-- Split View Obras -->
@@ -336,16 +390,40 @@ app.get('/', (req: Request, res: Response) => {
       </section>
     </div>
 
-    <!-- ABA 2: VISUALIZADOR DA AGENDA DE EVENTOS (FEATURE 2) -->
-    <div id="conteudo-agenda" class="flex-1 flex flex-col hidden">
+    <!-- ABA 2: MÓDULO 1 - VISÃO DE CALENDÁRIO VISUAL COM FULLCALENDAR -->
+    <div id="conteudo-calendario" class="flex-1 flex flex-col hidden">
       <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex-1 flex flex-col">
-        <!-- Filtros da Agenda -->
+        <!-- Barra de Seleção de Obra para o Calendário -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-800 gap-4">
           <div>
             <h2 class="text-base font-bold text-white flex items-center gap-2">
-              📅 Cronograma & Eventos das Obras
+              📅 Calendário Visual das Obras
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Todos os agendamentos extraídos automaticamente pela IA ou criados</p>
+            <p class="text-xs text-slate-400 mt-0.5">Selecione uma obra para ver as entregas e frentes de serviço no calendário</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <select id="select-obra-calendario" onchange="atualizarCalendario()" class="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-semibold">
+              <option value="">Selecione uma Obra...</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Container do FullCalendar -->
+        <div class="mt-5 flex-1 min-h-[550px] p-2 bg-slate-950/50 rounded-xl border border-slate-800/80">
+          <div id="calendar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 3: LISTA CRONOLÓGICA DE EVENTOS -->
+    <div id="conteudo-agenda" class="flex-1 flex flex-col hidden">
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex-1 flex flex-col">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-800 gap-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              📋 Lista de Agendamentos Cadastrados
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">Todos os agendamentos registrados no banco de dados</p>
           </div>
           <div class="flex items-center gap-3">
             <select id="filtro-obra-agenda" onchange="carregarAgenda()" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
@@ -357,7 +435,6 @@ app.get('/', (req: Request, res: Response) => {
           </div>
         </div>
 
-        <!-- Tabela de Agendamentos -->
         <div class="mt-4 flex-1 overflow-x-auto custom-scroll">
           <table class="w-full text-left text-xs text-slate-300">
             <thead class="text-[11px] uppercase bg-slate-950/80 text-slate-400 border-b border-slate-800">
@@ -404,7 +481,7 @@ app.get('/', (req: Request, res: Response) => {
         <div>
           <label class="block text-xs font-medium text-slate-300 mb-1">Telefones dos Responsáveis (Separados por vírgula)</label>
           <textarea id="modal-responsaveis" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" placeholder="5511988139833, 5511978543369"></textarea>
-          <p class="text-[11px] text-slate-500 mt-1">Os responsáveis recebem os relatórios diários e semanais no privado.</p>
+          <p class="text-[11px] text-slate-500 mt-1">Os responsáveis recebem o infográfico semanal e diário em imagem no privado.</p>
         </div>
 
         <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
@@ -424,24 +501,85 @@ app.get('/', (req: Request, res: Response) => {
   <script>
     let cacheGrupos = [];
     let cacheObras = [];
+    let calendarInstance = null;
 
     function trocarAba(aba) {
       const btnObras = document.getElementById('tab-obras');
+      const btnCalendario = document.getElementById('tab-calendario');
       const btnAgenda = document.getElementById('tab-agenda');
+
       const viewObras = document.getElementById('conteudo-obras');
+      const viewCalendario = document.getElementById('conteudo-calendario');
       const viewAgenda = document.getElementById('conteudo-agenda');
 
-      if (aba === 'obras') {
-        btnObras.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow transition';
-        btnAgenda.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition';
-        viewObras.classList.remove('hidden');
-        viewAgenda.classList.add('hidden');
-      } else {
-        btnAgenda.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow transition';
-        btnObras.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition';
-        viewAgenda.classList.remove('hidden');
-        viewObras.classList.add('hidden');
+      const abas = [
+        { id: 'obras', btn: btnObras, view: viewObras },
+        { id: 'calendario', btn: btnCalendario, view: viewCalendario },
+        { id: 'agenda', btn: btnAgenda, view: viewAgenda }
+      ];
+
+      abas.forEach(a => {
+        if (a.id === aba) {
+          a.btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow transition';
+          a.view.classList.remove('hidden');
+        } else {
+          a.btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition';
+          a.view.classList.add('hidden');
+        }
+      });
+
+      if (aba === 'calendario') {
+        inicializarOuAtualizarCalendario();
+      } else if (aba === 'agenda') {
         carregarAgenda();
+      }
+    }
+
+    function inicializarOuAtualizarCalendario() {
+      const calendarEl = document.getElementById('calendar');
+      if (!calendarInstance) {
+        calendarInstance = new FullCalendar.Calendar(calendarEl, {
+          initialView: 'dayGridMonth',
+          locale: 'pt-br',
+          headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,listWeek'
+          },
+          buttonText: {
+            today: 'Hoje',
+            month: 'Mês',
+            week: 'Semana',
+            list: 'Lista'
+          },
+          events: [],
+          eventClick: function(info) {
+            alert('📌 ' + info.event.title + '\\nObra: ' + (info.event.extendedProps.obra_id || ''));
+          }
+        });
+        calendarInstance.render();
+      } else {
+        calendarInstance.render();
+      }
+      atualizarCalendario();
+    }
+
+    async function atualizarCalendario() {
+      const obraId = document.getElementById('select-obra-calendario').value;
+      if (!calendarInstance) return;
+
+      if (!obraId) {
+        calendarInstance.removeAllEvents();
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/agenda/' + encodeURIComponent(obraId));
+        const eventos = await res.json();
+        calendarInstance.removeAllEvents();
+        calendarInstance.addEventSource(eventos);
+      } catch (err) {
+        console.error('Erro ao carregar eventos no FullCalendar:', err);
       }
     }
 
@@ -523,6 +661,7 @@ app.get('/', (req: Request, res: Response) => {
         if (res.ok) {
           showToast('Evento excluído.', '🗑️');
           await carregarAgenda();
+          if (calendarInstance) atualizarCalendario();
         }
       } catch {
         alert('Erro ao excluir evento.');
@@ -566,11 +705,12 @@ app.get('/', (req: Request, res: Response) => {
       const listaEl = document.getElementById('obras-lista');
       const countEl = document.getElementById('obras-count');
       const filtroEl = document.getElementById('filtro-obra-agenda');
+      const selectCalendarioEl = document.getElementById('select-obra-calendario');
       const obras = Array.isArray(cacheObras) ? cacheObras : [];
       countEl.innerText = obras.length + ' monitoradas';
 
-      // Atualiza options do filtro da agenda
       filtroEl.innerHTML = '<option value="">Todas as Obras</option>' + obras.map(o => \`<option value="\${o.obra_id}">\${o.nome_obra}</option>\`).join('');
+      selectCalendarioEl.innerHTML = '<option value="">Selecione uma Obra...</option>' + obras.map(o => \`<option value="\${o.obra_id}">\${o.nome_obra}</option>\`).join('');
 
       if (obras.length === 0) {
         listaEl.innerHTML = '<li class="py-12 text-center text-slate-500 text-xs border border-dashed border-slate-800/80 rounded-xl p-6">Nenhuma obra monitorizada ainda.</li>';
@@ -705,7 +845,7 @@ app.get('/', (req: Request, res: Response) => {
 // ==============================================================================
 app.listen(PORT, () => {
   console.log('\n======================================================');
-  console.log('🚀 [GADAP Hub] Setup UI & Multi-Obras Manager Online!');
+  console.log('🚀 [GADAP Hub] Setup UI & FullCalendar Manager Online!');
   console.log(`🌐 Acesse no navegador: http://localhost:${PORT}`);
   console.log('======================================================\n');
   iniciarBaileysSetup();
