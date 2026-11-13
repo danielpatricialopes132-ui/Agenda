@@ -65,3 +65,4 @@ Se qualquer um desses comandos falhar, o trabalho **NÃO ESTÁ PRONTO**. Corrija
 1. **Arquivos Completos**: Sempre que criar ou atualizar um arquivo, forneça o código **completo** do arquivo de ponta a ponta. Não utilize trechos soltos, reticências (`// ... resto do código`) ou instruções vagas de substituição.
 2. **Tipagem Estrita**: É terminantemente proibido o uso de `any` injustificado. Defina interfaces explícitas para retornos de IA, payloads do Supabase e eventos do Baileys.
 3. **Tratamento de Erros e Logs Estruturados**: O runner executa headless no GitHub Actions. Toda operação crítica (leitura de chaves, parsing de IA, queries de banco) deve conter blocos `try/catch` com logs prefixados (`[DB]`, `[AI]`, `[WhatsApp]`, `[Relatórios]`) para que falhas nunca passem silenciosas nos logs do GitHub Actions.
+
