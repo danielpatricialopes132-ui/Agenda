@@ -168,3 +168,4 @@ export async function gerarImagemAgendaSemana(
     throw err;
   }
 }
+

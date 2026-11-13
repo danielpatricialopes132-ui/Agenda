@@ -64,3 +64,4 @@ export async function gerarAudioBriefing(
     throw err;
   }
 }
+
