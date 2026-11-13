@@ -2,13 +2,11 @@
   "name": "agenda-obra-bot",
   "version": "1.0.0",
   "description": "WhatsApp Bot para gestão e agendamento de obras com Baileys, Supabase e Gemini",
-  "main": "dist/bot.js",
+  "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/bot.js",
-    "start:setup": "ts-node src/setup.ts",
-    "dev:bot": "tsx watch src/bot.ts",
-    "dev:setup": "tsx watch src/setup.ts"
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

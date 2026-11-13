@@ -1,0 +1,21 @@
+name: Wake Render Service (Despertador)
+
+on:
+  schedule:
+    # 09:55 UTC = 06:55 AM em Brasília (Segunda a Sexta) - minutos antes dos relatórios matinais
+    - cron: '55 9 * * 1-5'
+    # 11:55 UTC = 08:55 AM em Brasília (Segunda-feira) - minutos antes do relatório semanal
+    - cron: '55 11 * * 1'
+    # Trigger a cada 4 horas durante o dia para manter o Render aquecido
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Permite disparo manual com 1 clique
+
+jobs:
+  wake:
+    name: Despertar Render Web Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar Ping de Despertar para o Render
+        run: |
+          echo "⏰ Acordando Render Web Service..."
+          curl -s -f --retry 3 --max-time 60 https://agenda-xpsh.onrender.com/api/wake || echo "Aviso: Render em processo de boot."
