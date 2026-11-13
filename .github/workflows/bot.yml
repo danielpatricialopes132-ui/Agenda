@@ -37,3 +37,4 @@ jobs:
           OBRA_ID: ${{ secrets.OBRA_ID || 'obra_principal' }}
           TZ: 'America/Sao_Paulo' # Garante o fuso horário correto para a lógica de horários das obras
         run: npm start
+
