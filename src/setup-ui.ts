@@ -27,6 +27,15 @@ export interface ObraConfig {
   created_at?: string;
 }
 
+export interface EventoAgenda {
+  id: string;
+  obra_id: string;
+  data_evento: string;
+  horario: string;
+  descricao: string;
+  created_at?: string;
+}
+
 let status: StatusConexao = 'desconectado';
 let qrCodeImage: string | null = null;
 let gruposLista: GrupoInfo[] = [];
@@ -38,7 +47,7 @@ const app = express();
 app.use(express.json());
 
 // ==============================================================================
-// Integração Baileys (Sessão Remota via Supabase)
+// Integração Baileys
 // ==============================================================================
 async function iniciarBaileysSetup() {
   console.log('[Setup UI] Carregando credenciais do Supabase...');
@@ -64,7 +73,7 @@ async function iniciarBaileysSetup() {
         qrCodeImage = await QRCode.toDataURL(qr);
         console.log('[Setup UI] Novo QR Code gerado.');
       } catch (err) {
-        console.error('[Setup UI] Falha ao converter QR Code para base64:', err);
+        console.error('[Setup UI] Falha ao converter QR Code:', err);
       }
     }
 
@@ -84,30 +93,26 @@ async function iniciarBaileysSetup() {
           console.log(`[Setup UI] ${gruposLista.length} grupos carregados com sucesso!`);
         }
       } catch (groupErr) {
-        console.error('[Setup UI] Erro ao listar grupos participantes:', groupErr);
+        console.error('[Setup UI] Erro ao listar grupos:', groupErr);
       }
     }
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      console.warn(`[Setup UI] Conexão encerrada (status code: ${statusCode}).`);
-
       if (statusCode !== DisconnectReason.loggedOut) {
         status = 'desconectado';
         setTimeout(() => iniciarBaileysSetup(), 3000);
       } else {
         status = 'desconectado';
-        console.error('[Setup UI] Desconectado permanentemente (loggedOut).');
       }
     }
   });
 }
 
 // ==============================================================================
-// API Endpoints Robustos
+// API Endpoints
 // ==============================================================================
 
-// 1. Status da Conexão e Lista de Grupos
 app.get('/api/status', (req: Request, res: Response) => {
   res.json({
     status,
@@ -116,7 +121,6 @@ app.get('/api/status', (req: Request, res: Response) => {
   });
 });
 
-// 2. GET /api/obras: Garante retorno SEMPRE de array, tratando tabela inexistente
 app.get('/api/obras', async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
@@ -125,40 +129,24 @@ app.get('/api/obras', async (req: Request, res: Response) => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      // Se a tabela ainda não foi criada no Supabase, loga e devolve array vazio com status informativo
-      console.warn('[API /api/obras] Aviso na consulta ao Supabase:', error.message);
-      return res.json({
-        sucesso: false,
-        aviso: 'Tabela obras_config ainda não criada no Supabase.',
-        obras: [],
-      });
+      return res.json({ sucesso: false, aviso: error.message, obras: [] });
     }
 
-    const lista = Array.isArray(data) ? data : [];
-    return res.json({
-      sucesso: true,
-      obras: lista,
-    });
+    return res.json({ sucesso: true, obras: data || [] });
   } catch (err: any) {
-    console.error('[API /api/obras] Exceção:', err);
-    return res.json({
-      sucesso: false,
-      aviso: 'Erro interno ao consultar obras.',
-      obras: [],
-    });
+    return res.json({ sucesso: false, aviso: err.message, obras: [] });
   }
 });
 
-// 3. POST /api/obras: Criação ou atualização com feedback claro
 app.post('/api/obras', async (req: Request, res: Response) => {
   try {
     const { obra_id, nome_obra, responsaveis, ativa } = req.body;
 
     if (!obra_id || !nome_obra) {
-      return res.status(400).json({ error: 'Campos obra_id e nome_obra são obrigatórios.' });
+      return res.status(400).json({ error: 'obra_id e nome_obra são obrigatórios.' });
     }
 
-    const responsaveisTratados: string[] = Array.isArray(responsaveis)
+    const responsaveisTratados = Array.isArray(responsaveis)
       ? responsaveis.map((n: string) => String(n).replace(/\D/g, '')).filter(Boolean)
       : [];
 
@@ -179,46 +167,55 @@ app.post('/api/obras', async (req: Request, res: Response) => {
       .single();
 
     if (error) {
-      console.error('[API] Erro ao salvar obra no Supabase:', error.message);
       return res.status(500).json({ error: error.message });
     }
 
-    console.log(`[API] Obra configurada: "${nome_obra}" (${obra_id})`);
     return res.status(201).json({ sucesso: true, obra: data });
   } catch (err: any) {
-    console.error('[API] Exceção em POST /api/obras:', err);
-    return res.status(500).json({ error: 'Erro interno ao salvar obra.' });
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// 4. DELETE /api/obras/:id: Remoção de obra
 app.delete('/api/obras/:id', async (req: Request, res: Response) => {
   try {
-    const obraId = req.params.id;
-    if (!obraId) {
-      return res.status(400).json({ error: 'ID da obra inválido.' });
-    }
-
-    const { error } = await supabase
-      .from('obras_config')
-      .delete()
-      .eq('obra_id', obraId);
-
-    if (error) {
-      console.error(`[API] Erro ao deletar obra ${obraId}:`, error.message);
-      return res.status(500).json({ error: error.message });
-    }
-
-    console.log(`[API] Obra removida com sucesso: ${obraId}`);
+    const { error } = await supabase.from('obras_config').delete().eq('obra_id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
     return res.json({ sucesso: true });
   } catch (err: any) {
-    console.error('[API] Exceção em DELETE /api/obras:', err);
-    return res.status(500).json({ error: 'Erro interno ao deletar obra.' });
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Feature 2: API de Gestão da Agenda de Obras
+app.get('/api/agenda', async (req: Request, res: Response) => {
+  try {
+    const obraId = req.query.obra_id as string;
+    let query = supabase.from('agenda_obra').select('*').order('data_evento', { ascending: true }).order('horario', { ascending: true });
+
+    if (obraId) {
+      query = query.eq('obra_id', obraId);
+    }
+
+    const { data, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json(data || []);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/agenda/:id', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabase.from('agenda_obra').delete().eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ sucesso: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
 // ==============================================================================
-// Dashboard Embutido (Frontend Reformulado com Injeção Segura e Modal)
+// Dashboard Embutido (Frontend com Gestão de Obras + Visualizador de Agenda)
 // ==============================================================================
 app.get('/', (req: Request, res: Response) => {
   const html = `<!DOCTYPE html>
@@ -226,7 +223,7 @@ app.get('/', (req: Request, res: Response) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GADAP Hub - Gestão Multi-Obras WhatsApp</title>
+  <title>GADAP Hub - Gestão de Obras & WhatsApp Intelligence</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -236,13 +233,12 @@ app.get('/', (req: Request, res: Response) => {
     .custom-scroll::-webkit-scrollbar { width: 6px; }
     .custom-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
     .custom-scroll::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 4px; }
-    .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 1); }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col py-8 px-4 sm:px-6">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col py-6 px-4 sm:px-8">
 
-  <!-- Header -->
-  <header class="w-full max-w-7xl mx-auto flex items-center justify-between pb-6 border-b border-slate-800">
+  <!-- Header & Navegação em Abas -->
+  <header class="w-full max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-800 gap-4">
     <div class="flex items-center space-x-3">
       <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-bold text-slate-950 text-xl shadow-lg shadow-emerald-500/20">
         G
@@ -252,10 +248,21 @@ app.get('/', (req: Request, res: Response) => {
           GADAP Hub
           <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Multi-Obras</span>
         </h1>
-        <p class="text-xs text-slate-400">Painel de Onboarding & Gestão de Grupos de WhatsApp</p>
+        <p class="text-xs text-slate-400">Inteligência Operacional de Obras via WhatsApp</p>
       </div>
     </div>
-    <div id="badge-status" class="px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 bg-slate-800 text-slate-400 border border-slate-700">
+
+    <!-- Navegação por Abas -->
+    <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1.5 rounded-xl">
+      <button onclick="trocarAba('obras')" id="tab-obras" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow transition">
+        Obras & WhatsApp
+      </button>
+      <button onclick="trocarAba('agenda')" id="tab-agenda" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">
+        Agenda de Eventos
+      </button>
+    </div>
+
+    <div id="badge-status" class="px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 bg-slate-800 text-slate-400 border border-slate-700 self-start md:self-auto">
       <span class="w-2 h-2 rounded-full bg-slate-500 animate-pulse"></span>
       <span id="badge-texto">Carregando status...</span>
     </div>
@@ -264,98 +271,111 @@ app.get('/', (req: Request, res: Response) => {
   <!-- Container Principal -->
   <main class="w-full max-w-7xl mx-auto mt-6 flex-1 flex flex-col">
 
-    <!-- Alerta: Tabela Supabase Pendente -->
-    <div id="alerta-supabase" class="hidden mb-6 bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 flex items-start gap-3 text-amber-200 text-xs">
-      <span class="text-base">⚠️</span>
-      <div class="flex-1">
-        <p class="font-bold text-amber-100">Atenção: Tabela obras_config ainda não criada no Supabase</p>
-        <p class="mt-0.5 text-amber-300/80">
-          Abra o SQL Editor do seu Supabase e execute o comando:
-          <code class="block mt-1 font-mono bg-slate-950/80 p-2 rounded text-emerald-400 border border-amber-500/20">
-            CREATE TABLE IF NOT EXISTS public.obras_config (obra_id TEXT PRIMARY KEY, nome_obra TEXT NOT NULL, responsaveis TEXT[] DEFAULT '{}', ativa BOOLEAN DEFAULT TRUE, created_at TIMESTAMPTZ DEFAULT NOW());
-          </code>
-        </p>
-      </div>
+    <!-- ABA 1: CONFIGURAÇÃO DE OBRAS E WHATSAPP -->
+    <div id="conteudo-obras" class="flex-1 flex flex-col">
+      <!-- Tela Desconectado -->
+      <section id="card-desconectado" class="w-full max-w-md mx-auto my-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl hidden">
+        <div class="w-14 h-14 bg-slate-800 rounded-2xl mx-auto flex items-center justify-center mb-4">
+          <svg class="w-7 h-7 text-slate-400 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+          </svg>
+        </div>
+        <h2 class="text-lg font-semibold text-white">Conectando ao WhatsApp</h2>
+        <p class="text-xs text-slate-400 mt-2">Carregando credenciais criptográficas remotas no Supabase...</p>
+      </section>
+
+      <!-- Tela QR Code -->
+      <section id="card-qr" class="w-full max-w-md mx-auto my-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl hidden">
+        <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
+          Autenticação Requerida
+        </span>
+        <h2 class="text-xl font-bold text-white mt-4">Escaneie o QR Code</h2>
+        <p class="text-xs text-slate-400 mt-1 mb-6">WhatsApp &gt; Aparelhos Conectados &gt; Conectar um Aparelho</p>
+        <div class="p-3 bg-white rounded-2xl shadow-inner inline-block mx-auto border-4 border-slate-800">
+          <img id="qr-img" class="w-64 h-64 rounded-lg block" src="" alt="QR Code WhatsApp" />
+        </div>
+        <p class="text-xs text-slate-500 mt-6">Atualização automática a cada ciclo</p>
+      </section>
+
+      <!-- Split View Obras -->
+      <section id="card-conectado" class="w-full grid grid-cols-1 lg:grid-cols-2 gap-8 hidden flex-1">
+        <!-- Grupos WhatsApp -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col h-[650px]">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/50"></span>
+                Grupos Disponíveis no WhatsApp
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">Grupos identificados na conta conectada</p>
+            </div>
+            <span id="grupos-count" class="text-xs font-semibold px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg border border-slate-700">0 grupos</span>
+          </div>
+          <ul id="grupos-lista" class="mt-4 flex-1 overflow-y-auto custom-scroll pr-1 space-y-2.5">
+            <li class="py-12 text-center text-slate-500 text-xs">Carregando grupos do WhatsApp...</li>
+          </ul>
+        </div>
+
+        <!-- Obras Monitorizadas -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col h-[650px]">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-md shadow-blue-500/50"></span>
+                Obras Monitorizadas (Supabase)
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">Obras ativas que o bot lê mensagens e envia relatórios</p>
+            </div>
+            <span id="obras-count" class="text-xs font-semibold px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/30">0 monitoradas</span>
+          </div>
+          <ul id="obras-lista" class="mt-4 flex-1 overflow-y-auto custom-scroll pr-1 space-y-2.5">
+            <li class="py-12 text-center text-slate-500 text-xs">Carregando obras do Supabase...</li>
+          </ul>
+        </div>
+      </section>
     </div>
 
-    <!-- Tela 1: Desconectado / Conectando -->
-    <section id="card-desconectado" class="w-full max-w-md mx-auto my-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl hidden">
-      <div class="w-14 h-14 bg-slate-800 rounded-2xl mx-auto flex items-center justify-center mb-4">
-        <svg class="w-7 h-7 text-slate-400 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-        </svg>
-      </div>
-      <h2 class="text-lg font-semibold text-white">Conectando ao WhatsApp</h2>
-      <p class="text-xs text-slate-400 mt-2">Carregando credenciais criptográficas remotas no Supabase...</p>
-    </section>
-
-    <!-- Tela 2: QR Code -->
-    <section id="card-qr" class="w-full max-w-md mx-auto my-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl hidden">
-      <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
-        Autenticação Requerida
-      </span>
-      <h2 class="text-xl font-bold text-white mt-4">Escaneie o QR Code</h2>
-      <p class="text-xs text-slate-400 mt-1 mb-6">WhatsApp no Celular &gt; Aparelhos Conectados &gt; Conectar um Aparelho</p>
-      
-      <div class="p-3 bg-white rounded-2xl shadow-inner inline-block mx-auto border-4 border-slate-800">
-        <img id="qr-img" class="w-64 h-64 rounded-lg block" src="" alt="QR Code WhatsApp" />
-      </div>
-
-      <p class="text-xs text-slate-500 mt-6 flex items-center justify-center gap-1.5">
-        <svg class="w-4 h-4 text-emerald-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        Atualização automática em tempo real
-      </p>
-    </section>
-
-    <!-- Tela 3: Split View (Grupos Disponíveis vs Obras Monitorizadas) -->
-    <section id="card-conectado" class="w-full grid grid-cols-1 lg:grid-cols-2 gap-8 hidden flex-1">
-      
-      <!-- Painel Esquerdo: Grupos Disponíveis no WhatsApp -->
-      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col h-[650px]">
-        <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+    <!-- ABA 2: VISUALIZADOR DA AGENDA DE EVENTOS (FEATURE 2) -->
+    <div id="conteudo-agenda" class="flex-1 flex flex-col hidden">
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex-1 flex flex-col">
+        <!-- Filtros da Agenda -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-800 gap-4">
           <div>
             <h2 class="text-base font-bold text-white flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/50"></span>
-              Grupos Disponíveis no WhatsApp
+              📅 Cronograma & Eventos das Obras
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Grupos identificados na conta conectada</p>
+            <p class="text-xs text-slate-400 mt-0.5">Todos os agendamentos extraídos automaticamente pela IA ou criados</p>
           </div>
-          <span id="grupos-count" class="text-xs font-semibold px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg border border-slate-700">
-            0 grupos
-          </span>
+          <div class="flex items-center gap-3">
+            <select id="filtro-obra-agenda" onchange="carregarAgenda()" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
+              <option value="">Todas as Obras</option>
+            </select>
+            <button onclick="carregarAgenda()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">
+              Atualizar
+            </button>
+          </div>
         </div>
 
-        <!-- Lista Dinâmica de Grupos -->
-        <ul id="grupos-lista" class="mt-4 flex-1 overflow-y-auto custom-scroll pr-1 space-y-2.5">
-          <li class="py-12 text-center text-slate-500 text-xs">Carregando grupos do WhatsApp...</li>
-        </ul>
-      </div>
-
-      <!-- Painel Direito: Obras Monitorizadas (Configuradas no Banco) -->
-      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col h-[650px]">
-        <div class="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div>
-            <h2 class="text-base font-bold text-white flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-md shadow-blue-500/50"></span>
-              Obras Monitorizadas (Supabase)
-            </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Obras ativas que o bot lê agendamentos e envia relatórios</p>
-          </div>
-          <span id="obras-count" class="text-xs font-semibold px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/30">
-            0 monitoradas
-          </span>
+        <!-- Tabela de Agendamentos -->
+        <div class="mt-4 flex-1 overflow-x-auto custom-scroll">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="text-[11px] uppercase bg-slate-950/80 text-slate-400 border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4 rounded-l-lg">Data</th>
+                <th class="py-3 px-4">Horário</th>
+                <th class="py-3 px-4">Obra</th>
+                <th class="py-3 px-4">Compromisso / Descrição</th>
+                <th class="py-3 px-4 text-right rounded-r-lg">Ação</th>
+              </tr>
+            </thead>
+            <tbody id="agenda-tbody" class="divide-y divide-slate-800/60">
+              <tr><td colspan="5" class="py-8 text-center text-slate-500">Carregando cronograma...</td></tr>
+            </tbody>
+          </table>
         </div>
-
-        <!-- Lista Dinâmica de Obras -->
-        <ul id="obras-lista" class="mt-4 flex-1 overflow-y-auto custom-scroll pr-1 space-y-2.5">
-          <li class="py-12 text-center text-slate-500 text-xs">Carregando obras do Supabase...</li>
-        </ul>
       </div>
-
-    </section>
+    </div>
 
   </main>
 
@@ -367,15 +387,13 @@ app.get('/', (req: Request, res: Response) => {
           <span class="w-2 h-2 rounded-full bg-blue-500"></span>
           Configurar Monitoramento da Obra
         </h3>
-        <button onclick="fecharModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 text-sm">
-          ✕
-        </button>
+        <button onclick="fecharModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 text-sm">✕</button>
       </div>
 
       <form id="form-obra" onsubmit="salvarObra(event)" class="mt-5 space-y-4">
         <div>
           <label class="block text-xs font-medium text-slate-300 mb-1">Nome da Obra</label>
-          <input type="text" id="modal-nome" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 font-sans" placeholder="Ex: Edifício Bella Vista" />
+          <input type="text" id="modal-nome" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 font-sans" placeholder="Ex: Obra Leopoldo" />
         </div>
 
         <div>
@@ -384,20 +402,14 @@ app.get('/', (req: Request, res: Response) => {
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">
-            Números dos Responsáveis (Separados por vírgula)
-          </label>
-          <textarea id="modal-responsaveis" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" placeholder="5511999998888, 5511988887777"></textarea>
-          <p class="text-[11px] text-slate-500 mt-1">Os números receberão os relatórios semanais e diários diretamente no WhatsApp privado.</p>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Telefones dos Responsáveis (Separados por vírgula)</label>
+          <textarea id="modal-responsaveis" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" placeholder="5511988139833, 5511978543369"></textarea>
+          <p class="text-[11px] text-slate-500 mt-1">Os responsáveis recebem os relatórios diários e semanais no privado.</p>
         </div>
 
         <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
-          <button type="button" onclick="fecharModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition">
-            Cancelar
-          </button>
-          <button type="submit" id="btn-salvar" class="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition">
-            Salvar Obra
-          </button>
+          <button type="button" onclick="fecharModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition">Cancelar</button>
+          <button type="submit" id="btn-salvar" class="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition">Salvar Obra</button>
         </div>
       </form>
     </div>
@@ -409,13 +421,29 @@ app.get('/', (req: Request, res: Response) => {
     <span id="toast-msg">Mensagem</span>
   </div>
 
-  <footer class="mt-8 text-xs text-slate-600 text-center">
-    GADAP Hub • Multi-Project WhatsApp Automation Suite
-  </footer>
-
   <script>
     let cacheGrupos = [];
     let cacheObras = [];
+
+    function trocarAba(aba) {
+      const btnObras = document.getElementById('tab-obras');
+      const btnAgenda = document.getElementById('tab-agenda');
+      const viewObras = document.getElementById('conteudo-obras');
+      const viewAgenda = document.getElementById('conteudo-agenda');
+
+      if (aba === 'obras') {
+        btnObras.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow transition';
+        btnAgenda.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition';
+        viewObras.classList.remove('hidden');
+        viewAgenda.classList.add('hidden');
+      } else {
+        btnAgenda.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow transition';
+        btnObras.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition';
+        viewAgenda.classList.remove('hidden');
+        viewObras.classList.add('hidden');
+        carregarAgenda();
+      }
+    }
 
     function showToast(msg, icon = '✨') {
       const toast = document.getElementById('toast');
@@ -432,10 +460,8 @@ app.get('/', (req: Request, res: Response) => {
     function abrirModal(id, nome) {
       document.getElementById('modal-id').value = id;
       document.getElementById('modal-nome').value = nome || '';
-
-      const obraExistente = cacheObras.find(o => o.obra_id === id);
-      document.getElementById('modal-responsaveis').value = obraExistente?.responsaveis ? obraExistente.responsaveis.join(', ') : '';
-
+      const obra = cacheObras.find(o => o.obra_id === id);
+      document.getElementById('modal-responsaveis').value = obra?.responsaveis ? obra.responsaveis.join(', ') : '';
       document.getElementById('modal-obra').classList.remove('hidden');
     }
 
@@ -451,8 +477,7 @@ app.get('/', (req: Request, res: Response) => {
 
       const obra_id = document.getElementById('modal-id').value;
       const nome_obra = document.getElementById('modal-nome').value;
-      const responsaveisRaw = document.getElementById('modal-responsaveis').value;
-      const responsaveis = responsaveisRaw.split(',').map(s => s.trim()).filter(Boolean);
+      const responsaveis = document.getElementById('modal-responsaveis').value.split(',').map(s => s.trim()).filter(Boolean);
 
       try {
         const res = await fetch('/api/obras', {
@@ -460,17 +485,16 @@ app.get('/', (req: Request, res: Response) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ obra_id, nome_obra, responsaveis, ativa: true })
         });
-
         const json = await res.json();
         if (res.ok && json.sucesso) {
           fecharModal();
-          showToast('Obra configurada com sucesso!', '✅');
+          showToast('Obra salva com sucesso!', '✅');
           await carregarObras();
           renderGrupos();
         } else {
-          alert('Erro ao salvar obra: ' + (json.error || 'Erro desconhecido. Verifique se a tabela obras_config foi criada no Supabase.'));
+          alert('Erro ao salvar obra: ' + (json.error || 'Erro desconhecido'));
         }
-      } catch (err) {
+      } catch {
         alert('Erro de conexão ao salvar obra.');
       } finally {
         btn.innerText = 'Salvar Obra';
@@ -479,8 +503,7 @@ app.get('/', (req: Request, res: Response) => {
     }
 
     async function removerObra(obraId, nome) {
-      if (!confirm('Deseja realmente remover o monitoramento da obra "' + nome + '"?')) return;
-
+      if (!confirm('Deseja remover o monitoramento da obra "' + nome + '"?')) return;
       try {
         const res = await fetch('/api/obras/' + encodeURIComponent(obraId), { method: 'DELETE' });
         if (res.ok) {
@@ -488,15 +511,27 @@ app.get('/', (req: Request, res: Response) => {
           await carregarObras();
           renderGrupos();
         }
-      } catch (err) {
-        alert('Erro de conexão ao remover obra.');
+      } catch {
+        alert('Erro ao remover obra.');
+      }
+    }
+
+    async function excluirEventoAgenda(id, descricao) {
+      if (!confirm('Deseja excluir o agendamento "' + descricao + '"?')) return;
+      try {
+        const res = await fetch('/api/agenda/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (res.ok) {
+          showToast('Evento excluído.', '🗑️');
+          await carregarAgenda();
+        }
+      } catch {
+        alert('Erro ao excluir evento.');
       }
     }
 
     function renderGrupos() {
       const listaEl = document.getElementById('grupos-lista');
       const countEl = document.getElementById('grupos-count');
-      
       const grupos = Array.isArray(cacheGrupos) ? cacheGrupos : [];
       countEl.innerText = grupos.length + ' grupos';
 
@@ -506,9 +541,9 @@ app.get('/', (req: Request, res: Response) => {
       }
 
       listaEl.innerHTML = grupos.map(g => {
-        const obraExistente = cacheObras.find(o => o.obra_id === g.id);
-        const jaConfigurada = !!obraExistente;
-        const nomeExibicao = jaConfigurada ? obraExistente.nome_obra : g.subject;
+        const obra = cacheObras.find(o => o.obra_id === g.id);
+        const jaConfigurada = !!obra;
+        const nomeExibicao = jaConfigurada ? obra.nome_obra : g.subject;
 
         return \`
           <li class="bg-slate-950/70 border \${jaConfigurada ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'} rounded-xl p-3.5 flex items-center justify-between gap-3 hover:border-slate-700 transition">
@@ -530,16 +565,15 @@ app.get('/', (req: Request, res: Response) => {
     function renderObras() {
       const listaEl = document.getElementById('obras-lista');
       const countEl = document.getElementById('obras-count');
-
+      const filtroEl = document.getElementById('filtro-obra-agenda');
       const obras = Array.isArray(cacheObras) ? cacheObras : [];
       countEl.innerText = obras.length + ' monitoradas';
 
+      // Atualiza options do filtro da agenda
+      filtroEl.innerHTML = '<option value="">Todas as Obras</option>' + obras.map(o => \`<option value="\${o.obra_id}">\${o.nome_obra}</option>\`).join('');
+
       if (obras.length === 0) {
-        listaEl.innerHTML = \`
-          <li class="py-12 text-center text-slate-500 text-xs border border-dashed border-slate-800/80 rounded-xl p-6">
-            Nenhuma obra monitorizada ainda.<br/>Selecione um grupo no painel esquerdo e clique em "Configurar".
-          </li>
-        \`;
+        listaEl.innerHTML = '<li class="py-12 text-center text-slate-500 text-xs border border-dashed border-slate-800/80 rounded-xl p-6">Nenhuma obra monitorizada ainda.</li>';
         return;
       }
 
@@ -571,20 +605,49 @@ app.get('/', (req: Request, res: Response) => {
       try {
         const res = await fetch('/api/obras');
         const json = await res.json();
-        
-        const alertaEl = document.getElementById('alerta-supabase');
-        if (json.sucesso === false && json.aviso) {
-          alertaEl.classList.remove('hidden');
-        } else {
-          alertaEl.classList.add('hidden');
-        }
-
         cacheObras = Array.isArray(json.obras) ? json.obras : [];
         renderObras();
       } catch (err) {
-        console.error('Erro ao consultar /api/obras:', err);
-        cacheObras = [];
-        renderObras();
+        console.error(err);
+      }
+    }
+
+    async function carregarAgenda() {
+      const obraId = document.getElementById('filtro-obra-agenda').value;
+      const tbody = document.getElementById('agenda-tbody');
+      tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-500">Buscando agendamentos...</td></tr>';
+
+      try {
+        const url = obraId ? '/api/agenda?obra_id=' + encodeURIComponent(obraId) : '/api/agenda';
+        const res = await fetch(url);
+        const eventos = await res.json();
+
+        if (!Array.isArray(eventos) || eventos.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="py-10 text-center text-slate-500">Nenhum evento registrado.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = eventos.map(ev => {
+          const obra = cacheObras.find(o => o.obra_id === ev.obra_id);
+          const nomeObra = obra ? obra.nome_obra : 'Obra Desconhecida';
+          const [ano, mes, dia] = ev.data_evento.split('-');
+
+          return \`
+            <tr class="hover:bg-slate-900/60 transition-colors">
+              <td class="py-3 px-4 font-mono font-medium text-emerald-400">\${dia}/\${mes}/\${ano}</td>
+              <td class="py-3 px-4 font-mono text-slate-300">\${ev.horario}</td>
+              <td class="py-3 px-4 font-medium text-white">\${nomeObra}</td>
+              <td class="py-3 px-4 text-slate-200">\${ev.descricao}</td>
+              <td class="py-3 px-4 text-right">
+                <button onclick="excluirEventoAgenda('\${ev.id}', '\${ev.descricao.replace(/'/g, "\\\\'")}')" class="px-2.5 py-1 text-rose-400 hover:bg-rose-500/10 rounded-lg border border-rose-500/20 text-[11px] transition">
+                  Excluir
+                </button>
+              </td>
+            </tr>
+          \`;
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-rose-400">Erro ao carregar agenda.</td></tr>';
       }
     }
 
@@ -602,25 +665,19 @@ app.get('/', (req: Request, res: Response) => {
         if (data.status === 'desconectado') {
           badge.className = 'px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 bg-amber-500/10 text-amber-400 border border-amber-500/20';
           badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span><span>Conectando...</span>';
-
           cardDesconectado.classList.remove('hidden');
           cardQr.classList.add('hidden');
           cardConectado.classList.add('hidden');
         } else if (data.status === 'qr') {
           badge.className = 'px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 bg-blue-500/10 text-blue-400 border border-blue-500/20';
           badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span><span>Aguardando Scan</span>';
-
           cardDesconectado.classList.add('hidden');
           cardQr.classList.remove('hidden');
           cardConectado.classList.add('hidden');
-
-          if (data.qrCodeImage) {
-            qrImg.src = data.qrCodeImage;
-          }
+          if (data.qrCodeImage) qrImg.src = data.qrCodeImage;
         } else if (data.status === 'conectado') {
           badge.className = 'px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
           badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>WhatsApp Conectado</span>';
-
           cardDesconectado.classList.add('hidden');
           cardQr.classList.add('hidden');
           cardConectado.classList.remove('hidden');
@@ -629,11 +686,10 @@ app.get('/', (req: Request, res: Response) => {
           renderGrupos();
         }
       } catch (err) {
-        console.error('Erro em pollStatus:', err);
+        console.error(err);
       }
     }
 
-    // Inicialização
     setInterval(pollStatus, 2500);
     pollStatus();
     carregarObras();

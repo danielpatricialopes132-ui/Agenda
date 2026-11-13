@@ -5,42 +5,33 @@ Documento vivo de sincronização entre o desenvolvedor humano e os agentes de I
 ---
 
 ## [State]
-`07 - Arquitetura Multi-Obras Dinâmica Concluída`
+`08 - Pacote Completo de Evoluções Implementado`
 
 ---
 
 ## [Context]
-A arquitetura do bot de WhatsApp foi completamente evoluída de um modelo fixo (via `.env`) para um modelo dinâmico **Multi-Obras**, suportando múltiplos canteiros de obras simultâneos geridos pelo Dashboard local (`src/setup-ui.ts`) e persistidos na tabela `obras_config` do Supabase.
+O bot do ecossistema GADAP Hub foi expandido com 4 grandes frentes de inteligência operacional de canteiro de obras: confirmações ativas com cartões, visualizador de agenda no dashboard, detector de conflitos logísticos e comandos rápidos via WhatsApp.
 
 ---
 
 ## [Completed]
-- [x] **Módulo 1: Base de Dados (Supabase)**:
-  - Script DDL atualizado em `supabase_schema.sql` com a tabela `obras_config` (`obra_id [PK]`, `nome_obra`, `responsaveis [TEXT[]]`, `ativa [BOOL]`, `created_at`).
-  - Relacionamento de chave estrangeira em `agenda_obra` para `obras_config(obra_id)`.
-  - Atualização da tabela `disparos_executados` com constraint única por `obra_id`, `tipo_disparo` e `referencia_data`.
-- [x] **Módulo 2: Backend do Dashboard (`src/setup-ui.ts`)**:
-  - `GET /api/obras`: Consulta todas as obras cadastradas no Supabase.
-  - `POST /api/obras`: Cadastra/atualiza obras com higienização dos números dos responsáveis.
-  - `DELETE /api/obras/:id`: Remove ou inativa o monitoramento de uma obra.
-- [x] **Módulo 3: UX/UI do Dashboard (`src/setup-ui.ts`)**:
-  - Tela dividida em duas colunas: **Grupos Disponíveis no WhatsApp** (esquerda) e **Obras Monitorizadas** (direita).
-  - Botão azul **"Configurar Obra"** abrindo modal interativo em Tailwind CSS com nome da obra, JID bloqueado e textarea para múltiplos números de responsáveis.
-  - Cards visuais com tags de responsáveis, status ativo e botão de remoção rápida.
-- [x] **Módulo 4: Motor do Bot (`src/index.ts`)**:
-  - Filtro dinâmico: o bot consulta a tabela `obras_config` via cache em memória com TTL de 2 minutos para verificar se o grupo é monitorado, eliminando dependência da variável estática `OBRA_GROUP_ID`.
-  - Agrupamento de agendamentos por `obra_id`.
-  - Motor de relatórios multi-obras com disparos no grupo da obra e em privado para cada telefone cadastrado em `responsaveis` (`@s.whatsapp.net`).
+- [x] **Feature 1: Confirmação Ativa no Grupo do WhatsApp**:
+  - Resposta citada (`quoted message`) com cartão formatado contendo data, horário, resumo do compromisso e nome da obra.
+- [x] **Feature 2: Visualizador da Agenda no Dashboard (`src/setup-ui.ts`)**:
+  - Nova aba **"Agenda de Eventos"** no dashboard com filtros por obra, listagem cronológica e botão de exclusão de eventos.
+  - Endpoints `GET /api/agenda` e `DELETE /api/agenda/:id`.
+- [x] **Feature 3: Alerta de Conflitos e Choques Logísticos (`src/lib/aiProcessor.ts`)**:
+  - Função `detectarConflitosAgenda` que analisa incompatibilidade de espaço e sobreposição de descargas/concretagens no mesmo dia.
+  - Emissão de alerta `⚠️ ALERTA DE CONFLITO LOGÍSTICO` direto na mensagem do WhatsApp com sugestão de ajuste.
+- [x] **Feature 4: Comandos Rápidos via WhatsApp (`!hoje`, `!agenda`, `!clima`)**:
+  - `!hoje`: Resumo imediato dos compromissos do dia.
+  - `!agenda` ou `!semana`: Agenda completa dos próximos 7 dias.
+  - `!clima` ou `!chuva`: Boletim meteorológico operacional para proteção de agregados e planejamento de concretagens.
+- [x] **Tabelas do Supabase (`obras_config`, `agenda_obra`, `disparos_executados`)** ativas e validadas.
 
 ---
 
 ## [Pending / Next Steps]
-1. [ ] **Criar a tabela `obras_config` no Supabase**:
-   Executar o script DDL no SQL Editor do Supabase para criar `obras_config` e ajustar constraints.
-2. [ ] **Iniciar o Dashboard e Cadastrar as Obras**:
-   Executar `npm run setup:ui`, escanear o QR Code em `http://localhost:3000` e configurar os grupos de obra desejados com seus respectivos responsáveis.
-
----
-
-## [Known Issues / Blockers]
-- Necessário rodar o comando DDL de `obras_config` no Supabase para que a nova API e o bot persistam as configurações dinâmicas.
+1. [ ] Testar os comandos rápidos (`!hoje`, `!agenda`, `!clima`) diretamente no grupo "Obra Leopoldo" do WhatsApp.
+2. [ ] Testar envio de uma mensagem com conflito evidente (ex: duas descargas pesadas no mesmo horário) para ver o alerta da IA.
+3. [ ] Subir as alterações com `git push origin main`.

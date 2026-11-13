@@ -18,15 +18,17 @@ export interface ResultadoAgendamento {
   data_iso: string | null;
   horario: string | null;
   descricao: string | null;
+  categoria?: string | null; // 'entrega', 'servico', 'vistoria', 'outro'
+}
+
+export interface AnaliseConflito {
+  tem_conflito: boolean;
+  motivo_conflito: string | null;
+  sugestao: string | null;
 }
 
 /**
- * Processador de Linguagem Natural baseado no Google Gemini para identificação e
- * extração estruturada de compromissos operacionais em obras (GADAP Hub).
- *
- * @param textoMensagem Conteúdo textual da mensagem recebida no WhatsApp.
- * @param dataAtualBase Data de referência no formato "YYYY-MM-DD" para resolução temporal.
- * @returns Objeto estruturado conforme a interface ResultadoAgendamento.
+ * Extrai agendamentos de mensagens em linguagem natural com Gemini.
  */
 export async function extrairAgendamento(
   textoMensagem: string,
@@ -37,6 +39,7 @@ export async function extrairAgendamento(
     data_iso: null,
     horario: null,
     descricao: null,
+    categoria: null,
   };
 
   if (!textoMensagem || textoMensagem.trim().length === 0) {
@@ -44,41 +47,35 @@ export async function extrairAgendamento(
   }
 
   try {
-    // Calcula o dia da semana a partir da data de referência para orientar a IA
     const dataRefObj = new Date(`${dataAtualBase}T12:00:00Z`);
     const diaSemana = isNaN(dataRefObj.getTime())
       ? ''
       : dataRefObj.toLocaleDateString('pt-BR', { weekday: 'long', timeZone: 'UTC' });
 
     const systemInstruction = `
-Você é o assistente de inteligência artificial responsável pela gestão de obras do ecossistema GADAP Hub.
-Seu papel é analisar mensagens de texto trocadas em grupos de WhatsApp de canteiros de obras e extrair exclusivamente compromissos, tarefas futuras e agendamentos operacionais.
+Você é o assistente inteligente de gestão de canteiros de obras do ecossistema GADAP Hub.
+Seu objetivo é analisar conversas de WhatsApp de equipes de obra e extrair agendamentos operacionais.
 
 [DATA DE REFERÊNCIA DE HOJE]: ${dataAtualBase}${diaSemana ? ` (${diaSemana})` : ''}.
 
-[CRITÉRIOS DE AVALIAÇÃO]:
+[CRITÉRIOS]:
 1. is_agendamento:
-   - Defina como TRUE apenas se a mensagem indicar claramente um compromisso, entrega ou serviço programado para uma data futura ou para o próprio dia (ex: chegada de caminhão betoneira/bomba, entrega de materiais como pisos, persianas, esquadrias, gesso, cimento; visitas de engenheiros, vistorias técnicas, ensaios de concreto, medições de bancadas).
-   - Defina como FALSE se for conversa informal, cumprimentos ("bom dia", "valeu"), dúvidas pontuais, fotos sem descrição de agendamento ou notificações de eventos que já aconteceram no passado.
+   - TRUE se for entrega de material (persianas, vidros, cimento, pisos, gesso, ferragem), serviços/frentes de trabalho (concretagem, pintura, caçamba, hidráulica, elétrica) ou visitas/vistorias.
+   - FALSE se for conversa informal, cumprimentos, dúvidas gerais ou relatos passados.
 
 2. data_iso:
-   - Calcule a data exata com base na [DATA DE REFERÊNCIA DE HOJE].
-   - Resolva termos relativos com precisão: "hoje", "amanhã", "depois de amanhã", "segunda-feira que vem", "dia 25".
-   - Formato obrigatório: "YYYY-MM-DD". Se não for agendamento ou não houver data determinável, retorne null.
+   - Calcule com precisão em relação à data de hoje ("hoje", "amanhã", "quarta que vem", "dia 20"). Formato: YYYY-MM-DD.
 
 3. horario:
-   - Extraia o horário específico mencionado (ex: "às 14h" -> "14:00", "09:30", "no final da tarde por volta das 17h" -> "17:00").
-   - Se a mensagem marcar um dia específico mas não citar horário, defina como null.
-   - Formato obrigatório: "HH:MM" (padrão 24 horas) ou null.
+   - Formato HH:MM (24h) ou null se não houver horário especificado.
 
 4. descricao:
-   - Resumo conciso, direto e objetivo do compromisso agendado (ex: "Entrega de persianas", "Concretagem da laje do 2º pavimento", "Vistoria técnica da construtora").
-   - Se não for agendamento, retorne null.
+   - Resumo curto e claro da atividade (ex: "Entrega de persianas e trilhos", "Concretagem da viga baldrame").
 
-Você deve responder RIGOROSAMENTE através do schema JSON exigido, sem adicionar blocos de markdown ou comentários.
+5. categoria:
+   - 'entrega', 'servico', 'vistoria' ou 'outro'.
 `.trim();
 
-    // Utiliza o modelo gemini-1.5-flash com schema JSON restritivo
     const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash',
       systemInstruction,
@@ -87,25 +84,11 @@ Você deve responder RIGOROSAMENTE através do schema JSON exigido, sem adiciona
         responseSchema: {
           type: SchemaType.OBJECT,
           properties: {
-            is_agendamento: {
-              type: SchemaType.BOOLEAN,
-              description: 'True se for um compromisso de obra futuro/programado, false caso contrário',
-            },
-            data_iso: {
-              type: SchemaType.STRING,
-              nullable: true,
-              description: 'Data do evento no formato YYYY-MM-DD ou null',
-            },
-            horario: {
-              type: SchemaType.STRING,
-              nullable: true,
-              description: 'Horário do evento no formato HH:MM (24h) ou null',
-            },
-            descricao: {
-              type: SchemaType.STRING,
-              nullable: true,
-              description: 'Descrição resumida e clara do evento ou null',
-            },
+            is_agendamento: { type: SchemaType.BOOLEAN },
+            data_iso: { type: SchemaType.STRING, nullable: true },
+            horario: { type: SchemaType.STRING, nullable: true },
+            descricao: { type: SchemaType.STRING, nullable: true },
+            categoria: { type: SchemaType.STRING, nullable: true },
           },
           required: ['is_agendamento', 'data_iso', 'horario', 'descricao'],
         },
@@ -114,12 +97,8 @@ Você deve responder RIGOROSAMENTE através do schema JSON exigido, sem adiciona
 
     const result = await model.generateContent(textoMensagem);
     const outputRaw = result.response.text();
+    if (!outputRaw) return fallbackSeguro;
 
-    if (!outputRaw) {
-      return fallbackSeguro;
-    }
-
-    // Limpa eventuais marcações de código caso o modelo insira
     const limpo = outputRaw.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
     const parsed = JSON.parse(limpo);
 
@@ -128,9 +107,75 @@ Você deve responder RIGOROSAMENTE através do schema JSON exigido, sem adiciona
       data_iso: parsed.data_iso || null,
       horario: parsed.horario || null,
       descricao: parsed.descricao || null,
+      categoria: parsed.categoria || null,
     };
   } catch (error) {
-    console.error('[AI] Erro ao extrair agendamento com Gemini:', error);
+    console.error('[AI] Erro ao extrair agendamento:', error);
     return fallbackSeguro;
+  }
+}
+
+/**
+ * Avalia se o novo agendamento gera conflito logístico ou operacional
+ * com outros eventos já marcados para o mesmo dia no canteiro da obra.
+ */
+export async function detectarConflitosAgenda(
+  novoEvento: { descricao: string; horario: string | null },
+  eventosExistentesNoDia: Array<{ descricao: string; horario: string }>
+): Promise<AnaliseConflito> {
+  if (eventosExistentesNoDia.length === 0) {
+    return { tem_conflito: false, motivo_conflito: null, sugestao: null };
+  }
+
+  try {
+    const prompt = `
+Analise se este novo evento de obra entra em conflito logístico, operacional ou de espaço com os eventos já agendados para o mesmo dia no mesmo canteiro:
+
+NOVO EVENTO:
+- Atividade: "${novoEvento.descricao}"
+- Horário: ${novoEvento.horario || 'Não especificado'}
+
+EVENTOS JÁ AGENDADOS NO DIA:
+${eventosExistentesNoDia.map((ev, i) => `${i + 1}. Às ${ev.horario}: "${ev.descricao}"`).join('\n')}
+
+Exemplos de conflito real:
+- Concretagem de laje / caminhão bomba bloqueando entrada ao mesmo tempo que chegada de carreta de drywall/aço/persianas.
+- Pintura ou aplicação de resina em área fechada no mesmo horário que instalação com poeira ou lixamento de piso.
+- Sobreposição exata de horários para duas descargas pesadas no mesmo portão de acesso.
+
+Se não houver incompatibilidade real de espaço ou tempo, defina tem_conflito como false.
+`.trim();
+
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            tem_conflito: { type: SchemaType.BOOLEAN },
+            motivo_conflito: { type: SchemaType.STRING, nullable: true },
+            sugestao: { type: SchemaType.STRING, nullable: true },
+          },
+          required: ['tem_conflito', 'motivo_conflito', 'sugestao'],
+        },
+      },
+    });
+
+    const result = await model.generateContent(prompt);
+    const outputRaw = result.response.text();
+    if (!outputRaw) return { tem_conflito: false, motivo_conflito: null, sugestao: null };
+
+    const limpo = outputRaw.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+    const parsed = JSON.parse(limpo);
+
+    return {
+      tem_conflito: Boolean(parsed.tem_conflito),
+      motivo_conflito: parsed.motivo_conflito || null,
+      sugestao: parsed.sugestao || null,
+    };
+  } catch (err) {
+    console.error('[AI] Erro ao detectar conflitos de agenda:', err);
+    return { tem_conflito: false, motivo_conflito: null, sugestao: null };
   }
 }
