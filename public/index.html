@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GADAP Hub - Gestão Autônoma de Obras</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- SweetAlert2 para Toasts & Confirmações Elegantes -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <!-- FullCalendar.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.7); border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, 1); }
+
+    /* Estilização Dark Theme do FullCalendar */
+    .fc { --fc-border-color: #334155; --fc-page-bg-color: transparent; }
+    .fc-theme-standard th { background: #0f172a; padding: 12px; font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+    .fc-theme-standard td { border-color: #1e293b; }
+    .fc-daygrid-day-number { color: #cbd5e1; font-size: 12px; font-weight: 600; padding: 8px !important; }
+    .fc-event { background: linear-gradient(135deg, #059669, #0d9488); border: none; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+    .fc-button-primary { background-color: #1e293b !important; border-color: #334155 !important; font-size: 12px !important; font-weight: 600 !important; border-radius: 10px !important; }
+    .fc-button-primary:hover { background-color: #334155 !important; }
+    .fc-button-active { background-color: #2563eb !important; border-color: #2563eb !important; }
+    .fc-toolbar-title { font-size: 18px !important; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; }
+  </style>
+</head>
+<body class="h-full flex overflow-hidden bg-slate-950">
+
+  <!-- ============================================================================== -->
+  <!-- SIDEBAR LATERAL (SaaS Corporate Pattern) -->
+  <!-- ============================================================================== -->
+  <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0">
+    <!-- Logotipo GADAP Hub -->
+    <div class="p-6 border-b border-slate-800 flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-bold text-slate-950 text-xl shadow-lg shadow-emerald-500/20">
+        G
+      </div>
+      <div>
+        <h1 class="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
+          GADAP Hub
+        </h1>
+        <p class="text-[11px] text-slate-400 font-medium">Gestão de Obras</p>
+      </div>
+    </div>
+
+    <!-- Navegação Principal -->
+    <nav class="flex-1 p-4 space-y-1.5 overflow-y-auto">
+      <div class="text-[10px] uppercase font-bold text-slate-500 px-3 pb-2 pt-1 tracking-wider">Módulos</div>
+
+      <!-- Aba 1: Conexão WhatsApp -->
+      <button onclick="navegarPara('conexao')" id="nav-btn-conexao" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+        </svg>
+        <span>Conexão WhatsApp</span>
+      </button>
+
+      <!-- Aba 2: Gestão de Obras -->
+      <button onclick="navegarPara('obras')" id="nav-btn-obras" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition bg-blue-600 text-white shadow-lg shadow-blue-600/30">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+        </svg>
+        <span>Gestão de Obras</span>
+      </button>
+
+      <!-- Aba 3: Calendário da Obra -->
+      <button onclick="navegarPara('calendario')" id="nav-btn-calendario" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+        <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+        </svg>
+        <span>Calendário da Obra</span>
+      </button>
+    </nav>
+
+    <!-- Footer da Sidebar: Status da Sessão Remota -->
+    <div class="p-4 border-t border-slate-800 bg-slate-900/60">
+      <div class="flex items-center space-x-3">
+        <div id="sidebar-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse"></div>
+        <div class="overflow-hidden">
+          <p id="sidebar-status-text" class="text-xs font-semibold text-white truncate">Conectando...</p>
+          <p class="text-[10px] text-slate-500">Supabase Auth State</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============================================================================== -->
+  <!-- CONTEÚDO PRINCIPAL (TOP NAVBAR + TELAS) -->
+  <!-- ============================================================================== -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    
+    <!-- Top Navbar -->
+    <header class="h-16 bg-slate-900/70 backdrop-blur-md border-b border-slate-800 flex items-center justify-between px-8 flex-shrink-0">
+      <div>
+        <h2 id="top-title" class="text-sm font-bold text-white uppercase tracking-wider">Gestão de Obras</h2>
+        <p id="top-subtitle" class="text-xs text-slate-400">Vincule os grupos de WhatsApp aos engenheiros e mestres de obras</p>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <span id="badge-online" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center space-x-1.5 hidden">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>WhatsApp Conectado</span>
+        </span>
+        <button onclick="carregarTudo()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5 border border-slate-700">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          Sincronizar
+        </button>
+      </div>
+    </header>
+
+    <!-- Área de Exibição das Abas -->
+    <div class="flex-1 overflow-y-auto p-8 custom-scroll">
+
+      <!-- ========================================================================== -->
+      <!-- ABA 1: CONEXÃO WHATSAPP (QR CODE & STATUS) -->
+      <!-- ========================================================================== -->
+      <section id="view-conexao" class="max-w-xl mx-auto flex flex-col items-center justify-center min-h-[500px] hidden">
+        <div id="card-qr-box" class="w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center shadow-2xl relative overflow-hidden">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-4">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+            </svg>
+          </div>
+          
+          <h3 id="qr-title" class="text-lg font-bold text-white">Escaneie o QR Code</h3>
+          <p id="qr-desc" class="text-xs text-slate-400 mt-1 mb-6">Abra o WhatsApp &gt; Aparelhos Conectados &gt; Conectar um Aparelho</p>
+
+          <!-- Imagem do QR Code -->
+          <div id="qr-container" class="p-3 bg-white rounded-2xl shadow-inner inline-block mx-auto border-4 border-slate-800">
+            <img id="qr-img" class="w-64 h-64 rounded-lg block" src="" alt="QR Code WhatsApp" />
+          </div>
+
+          <!-- Mensagem quando Conectado -->
+          <div id="qr-conectado-msg" class="hidden py-8">
+            <div class="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center mx-auto mb-4 shadow-xl shadow-emerald-500/30">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            <h4 class="text-base font-bold text-white">Sessão Ativa e Sincronizada!</h4>
+            <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+              As credenciais criptográficas estão gravadas no Supabase. O bot está pronto para processar mensagens e disparar relatórios.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================== -->
+      <!-- ABA 2: GESTÃO DE OBRAS (GRUPOS DISPONÍVEIS VS MONITORIZADAS) -->
+      <!-- ========================================================================== -->
+      <section id="view-obras" class="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
+        
+        <!-- Painel Esquerdo: Grupos Disponíveis no WhatsApp -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col h-[700px]">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/50"></span>
+                Grupos Disponíveis no WhatsApp
+              </h3>
+              <p class="text-xs text-slate-400 mt-0.5">Identificados na conta conectada</p>
+            </div>
+            <span id="grupos-count" class="text-xs font-semibold px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg border border-slate-700">0 grupos</span>
+          </div>
+
+          <!-- Lista com Scroll de Grupos -->
+          <div id="grupos-lista" class="mt-4 flex-1 overflow-y-auto custom-scroll pr-1.5 space-y-3">
+            <div class="py-16 text-center text-slate-500 text-xs">Carregando grupos do WhatsApp...</div>
+          </div>
+        </div>
+
+        <!-- Painel Direito: Obras Monitorizadas (Configuradas no Banco) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col h-[700px]">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-md shadow-blue-500/50"></span>
+                Obras Monitorizadas (Supabase)
+              </h3>
+              <p class="text-xs text-slate-400 mt-0.5">Obras ativas que o bot lê mensagens e envia briefings</p>
+            </div>
+            <span id="obras-count" class="text-xs font-semibold px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/30">0 monitoradas</span>
+          </div>
+
+          <!-- Lista com Scroll de Obras -->
+          <div id="obras-lista" class="mt-4 flex-1 overflow-y-auto custom-scroll pr-1.5 space-y-3">
+            <div class="py-16 text-center text-slate-500 text-xs">Carregando obras do Supabase...</div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========================================================================== -->
+      <!-- ABA 3: VISÃO DE CALENDÁRIO (FULLCALENDAR INTEGRADO) -->
+      <!-- ========================================================================== -->
+      <section id="view-calendario" class="flex flex-col h-[750px] bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-md shadow-cyan-400/50"></span>
+              Calendário Operacional de Obras
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Navegue pelas entregas e vistorias agendadas pela IA</p>
+          </div>
+
+          <div class="flex items-center space-x-3">
+            <label class="text-xs text-slate-400 font-medium">Filtrar Obra:</label>
+            <select id="select-obra-calendario" onchange="carregarEventosFullCalendar()" class="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-semibold cursor-pointer">
+              <option value="">Selecione uma obra...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-5 flex-1 p-3 bg-slate-950/60 rounded-2xl border border-slate-800/80 overflow-hidden flex flex-col">
+          <div id="calendar" class="flex-1"></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ============================================================================== -->
+  <!-- MODAL DE CONFIGURAÇÃO DE OBRA (TAILWIND BACKDROP-BLUR) -->
+  <!-- ============================================================================== -->
+  <div id="modal-obra" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-2xl">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+          Configurar Monitoramento da Obra
+        </h3>
+        <button onclick="fecharModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 text-sm">✕</button>
+      </div>
+
+      <form id="form-obra" onsubmit="salvarObra(event)" class="mt-5 space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Nome da Obra</label>
+          <input type="text" id="modal-nome" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 font-sans" placeholder="Ex: Obra Leopoldo" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">ID do Grupo WhatsApp (JID)</label>
+          <input type="text" id="modal-id" readonly class="w-full bg-slate-950/80 border border-slate-800/80 rounded-xl px-3.5 py-2.5 text-xs font-mono text-emerald-400 select-all cursor-not-allowed" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Telefones dos Responsáveis (Separados por vírgula)</label>
+          <textarea id="modal-responsaveis" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" placeholder="5511988139833, 5511978543369"></textarea>
+          <p class="text-[11px] text-slate-500 mt-1">Os números cadastrados recebem o Infográfico em Imagem e o Briefing em Áudio matinal no privado.</p>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+          <button type="button" onclick="fecharModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition">Cancelar</button>
+          <button type="submit" id="btn-salvar" class="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition">Salvar Obra</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================================== -->
+  <!-- JAVASCRIPT VANILLA ROBUSTO & INTERATIVO -->
+  <!-- ============================================================================== -->
+  <script>
+    let abaAtual = 'obras';
+    let cacheGrupos = [];
+    let cacheObras = [];
+    let calendarInstance = null;
+
+    // Toast de Feedback
+    const Toast = Swal.mixin({
+      toast: true,
+      position: 'bottom-end',
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true,
+      background: '#0f172a',
+      color: '#f8fafc',
+    });
+
+    function navegarPara(aba) {
+      abaAtual = aba;
+      const abas = ['conexao', 'obras', 'calendario'];
+
+      abas.forEach(nome => {
+        const btn = document.getElementById('nav-btn-' + nome);
+        const view = document.getElementById('view-' + nome);
+
+        if (nome === aba) {
+          btn.className = 'w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition bg-blue-600 text-white shadow-lg shadow-blue-600/30';
+          view.classList.remove('hidden');
+        } else {
+          btn.className = 'w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60';
+          view.classList.add('hidden');
+        }
+      });
+
+      // Atualiza títulos do Top Navbar
+      const topTitle = document.getElementById('top-title');
+      const topSubtitle = document.getElementById('top-subtitle');
+
+      if (aba === 'conexao') {
+        topTitle.innerText = 'Conexão & Onboarding WhatsApp';
+        topSubtitle.innerText = 'Escaneie o QR Code para conectar a sessão remota';
+      } else if (aba === 'obras') {
+        topTitle.innerText = 'Gestão de Obras';
+        topSubtitle.innerText = 'Vincule os grupos de WhatsApp aos engenheiros e mestres';
+      } else if (aba === 'calendario') {
+        topTitle.innerText = 'Calendário Operacional';
+        topSubtitle.innerText = 'Visão de cronograma e entregas sincronizadas';
+        inicializarCalendario();
+      }
+    }
+
+    function abrirModal(id, nome) {
+      document.getElementById('modal-id').value = id;
+      document.getElementById('modal-nome').value = nome || '';
+
+      const obra = cacheObras.find(o => o.obra_id === id);
+      document.getElementById('modal-responsaveis').value = (obra && Array.isArray(obra.responsaveis))
+        ? obra.responsaveis.join(', ')
+        : '';
+
+      document.getElementById('modal-obra').classList.remove('hidden');
+    }
+
+    function fecharModal() {
+      document.getElementById('modal-obra').classList.add('hidden');
+    }
+
+    async function salvarObra(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-salvar');
+      btn.innerText = 'Gravando...';
+      btn.disabled = true;
+
+      const obra_id = document.getElementById('modal-id').value;
+      const nome_obra = document.getElementById('modal-nome').value;
+      const responsaveisRaw = document.getElementById('modal-responsaveis').value;
+      const responsaveis = responsaveisRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+      try {
+        const res = await fetch('/api/obras', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ obra_id, nome_obra, responsaveis, ativa: true }),
+        });
+
+        const json = await res.json();
+        if (res.ok && json.sucesso) {
+          fecharModal();
+          Toast.fire({ icon: 'success', title: 'Obra configurada com sucesso!' });
+          await carregarObras();
+          renderizarGrupos();
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Erro ao salvar',
+            text: json.error || 'Verifique se a tabela obras_config existe no Supabase.',
+            background: '#0f172a',
+            color: '#fff',
+          });
+        }
+      } catch (err) {
+        Toast.fire({ icon: 'error', title: 'Erro de conexão com o servidor.' });
+      } finally {
+        btn.innerText = 'Salvar Obra';
+        btn.disabled = false;
+      }
+    }
+
+    async function removerObra(obraId, nome) {
+      const result = await Swal.fire({
+        title: 'Remover Obra?',
+        text: 'Deseja desativar o monitoramento de "' + nome + '"?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#e11d48',
+        cancelButtonColor: '#334155',
+        confirmButtonText: 'Sim, remover',
+        cancelButtonText: 'Cancelar',
+        background: '#0f172a',
+        color: '#fff',
+      });
+
+      if (!result.isConfirmed) return;
+
+      try {
+        const res = await fetch('/api/obras/' + encodeURIComponent(obraId), { method: 'DELETE' });
+        if (res.ok) {
+          Toast.fire({ icon: 'success', title: 'Obra removida.' });
+          await carregarObras();
+          renderizarGrupos();
+        }
+      } catch (err) {
+        Toast.fire({ icon: 'error', title: 'Falha ao remover obra.' });
+      }
+    }
+
+    function renderizarGrupos() {
+      const container = document.getElementById('grupos-lista');
+      const countEl = document.getElementById('grupos-count');
+      const grupos = Array.isArray(cacheGrupos) ? cacheGrupos : [];
+      countEl.innerText = grupos.length + ' grupos';
+
+      if (grupos.length === 0) {
+        container.innerHTML = '<div class="py-20 text-center text-slate-500 text-xs">Nenhum grupo encontrado nesta conta do WhatsApp.</div>';
+        return;
+      }
+
+      container.innerHTML = grupos.map(g => {
+        const obra = cacheObras.find(o => o.obra_id === g.id);
+        const jaMonitorada = !!obra;
+        const nomeExibicao = jaMonitorada ? obra.nome_obra : g.subject;
+
+        return \`
+          <div class="bg-slate-950/70 border \${jaMonitorada ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'} rounded-2xl p-4 flex items-center justify-between gap-3 hover:border-slate-700 transition">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <h4 class="font-bold text-white text-xs truncate">\${nomeExibicao}</h4>
+                \${jaMonitorada ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] rounded-full font-bold uppercase tracking-wider">Monitorada</span>' : ''}
+              </div>
+              <p class="text-[11px] font-mono text-slate-500 truncate mt-1">\${g.id}</p>
+            </div>
+            <button onclick="abrirModal('\${g.id}', '\${nomeExibicao.replace(/'/g, "\\\\'")}')" class="px-3.5 py-2 rounded-xl \${jaMonitorada ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'} font-semibold text-xs whitespace-nowrap transition flex items-center gap-1.5">
+              <span>\${jaMonitorada ? '✏️ Editar' : '➕ Configurar Obra'}</span>
+            </button>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function renderizarObras() {
+      const container = document.getElementById('obras-lista');
+      const countEl = document.getElementById('obras-count');
+      const selectCalendario = document.getElementById('select-obra-calendario');
+      const obras = Array.isArray(cacheObras) ? cacheObras : [];
+      countEl.innerText = obras.length + ' monitoradas';
+
+      // Atualiza o select do FullCalendar
+      selectCalendario.innerHTML = '<option value="">Selecione uma obra...</option>' + obras.map(o => \`<option value="\${o.obra_id}">\${o.nome_obra}</option>\`).join('');
+
+      if (obras.length === 0) {
+        container.innerHTML = \`
+          <div class="py-20 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl p-6">
+            Nenhuma obra configurada ainda.<br/>Selecione um grupo no painel esquerdo e clique em "➕ Configurar Obra".
+          </div>
+        \`;
+        return;
+      }
+
+      container.innerHTML = obras.map(o => \`
+        <div class="bg-slate-950/80 border border-slate-800 hover:border-blue-500/40 rounded-2xl p-4 transition-all flex flex-col gap-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <h4 class="font-bold text-white text-xs truncate">\${o.nome_obra}</h4>
+              <p class="text-[11px] font-mono text-emerald-400 truncate mt-0.5 select-all">\${o.obra_id}</p>
+            </div>
+            <button onclick="removerObra('\${o.obra_id}', '\${o.nome_obra.replace(/'/g, "\\\\'")}')" class="text-xs px-2.5 py-1 text-rose-400 hover:bg-rose-500/10 rounded-lg border border-rose-500/20 transition whitespace-nowrap">
+              Remover
+            </button>
+          </div>
+
+          <div class="text-xs text-slate-400 flex flex-col gap-1.5 pt-2 border-t border-slate-800/60">
+            <span class="text-[11px] text-slate-500 font-medium">Responsáveis que recebem os relatórios:</span>
+            <div class="flex flex-wrap gap-1.5">
+              \${o.responsaveis && o.responsaveis.length > 0 
+                ? o.responsaveis.map(r => \`<span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-300">📱 \${r}</span>\`).join('')
+                : '<span class="text-slate-600 text-[11px]">Disparo apenas no grupo principal</span>'
+              }
+            </div>
+          </div>
+        </div>
+      \`).join('');
+    }
+
+    async function carregarObras() {
+      try {
+        const res = await fetch('/api/obras');
+        const json = await res.json();
+        cacheObras = Array.isArray(json.obras) ? json.obras : [];
+        renderizarObras();
+      } catch (err) {
+        console.error('Erro ao carregar obras:', err);
+      }
+    }
+
+    // Inicialização do FullCalendar
+    function inicializarCalendario() {
+      const calendarEl = document.getElementById('calendar');
+      if (!calendarInstance) {
+        calendarInstance = new FullCalendar.Calendar(calendarEl, {
+          initialView: 'dayGridMonth',
+          locale: 'pt-br',
+          headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,listWeek',
+          },
+          buttonText: { today: 'Hoje', month: 'Mês', week: 'Semana', list: 'Lista' },
+          events: [],
+          eventClick: function(info) {
+            Swal.fire({
+              title: info.event.title,
+              text: 'Data: ' + info.event.startStr,
+              icon: 'info',
+              background: '#0f172a',
+              color: '#fff',
+            });
+          },
+        });
+        calendarInstance.render();
+      } else {
+        calendarInstance.render();
+      }
+    }
+
+    async function carregarEventosFullCalendar() {
+      const obraId = document.getElementById('select-obra-calendario').value;
+      if (!calendarInstance) return;
+
+      if (!obraId) {
+        calendarInstance.removeAllEvents();
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/agenda/' + encodeURIComponent(obraId));
+        const eventos = await res.json();
+        calendarInstance.removeAllEvents();
+        calendarInstance.addEventSource(eventos);
+        Toast.fire({ icon: 'info', title: eventos.length + ' eventos carregados no calendário.' });
+      } catch (err) {
+        console.error('Erro ao carregar eventos:', err);
+      }
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+
+        const dot = document.getElementById('sidebar-status-dot');
+        const text = document.getElementById('sidebar-status-text');
+        const badgeOnline = document.getElementById('badge-online');
+        const qrContainer = document.getElementById('qr-container');
+        const qrImg = document.getElementById('qr-img');
+        const qrTitle = document.getElementById('qr-title');
+        const qrDesc = document.getElementById('qr-desc');
+        const qrConectadoMsg = document.getElementById('qr-conectado-msg');
+
+        if (data.status === 'desconectado') {
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping';
+          text.innerText = 'Conectando ao WhatsApp...';
+          badgeOnline.classList.add('hidden');
+
+          qrContainer.classList.add('hidden');
+          qrConectadoMsg.classList.add('hidden');
+          qrTitle.innerText = 'Inicializando WhatsApp';
+          qrDesc.innerText = 'Aguardando socket do Baileys...';
+        } else if (data.status === 'qr') {
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse';
+          text.innerText = 'Aguardando Leitura do QR Code';
+          badgeOnline.classList.add('hidden');
+
+          qrContainer.classList.remove('hidden');
+          qrConectadoMsg.classList.add('hidden');
+          qrTitle.innerText = 'Escaneie o QR Code';
+          qrDesc.innerText = 'Abra o WhatsApp > Aparelhos Conectados > Conectar um Aparelho';
+
+          if (data.qrCodeImage) {
+            qrImg.src = data.qrCodeImage;
+          }
+        } else if (data.status === 'conectado') {
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+          text.innerText = 'WhatsApp Conectado';
+          badgeOnline.classList.remove('hidden');
+
+          qrContainer.classList.add('hidden');
+          qrConectadoMsg.classList.remove('hidden');
+          qrTitle.innerText = 'Conexão Estabelecida';
+          qrDesc.innerText = 'Sessão ativa e sincronizada com o banco';
+
+          cacheGrupos = Array.isArray(data.gruposLista) ? data.gruposLista : [];
+          renderizarGrupos();
+        }
+      } catch (err) {
+        console.error('Erro em pollStatus:', err);
+      }
+    }
+
+    async function carregarTudo() {
+      await pollStatus();
+      await carregarObras();
+      Toast.fire({ icon: 'success', title: 'Dados sincronizados com sucesso!' });
+    }
+
+    // Inicialização
+    setInterval(pollStatus, 2500);
+    pollStatus();
+    carregarObras();
+  </script>
+</body>
+</html>
