@@ -4,41 +4,44 @@ on:
   schedule:
     # Executa a cada 3 horas (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC)
     - cron: '0 */3 * * *'
-  workflow_dispatch: # Permite disparo manual via painel do GitHub Actions
+  workflow_dispatch: # Permite disparo manual via interface do GitHub Actions
 
+# Evita que dois workflows rodem em paralelo e corrompam chaves criptográficas do Baileys
 concurrency:
   group: gadap-whatsapp-bot
-  cancel-in-progress: false # Evita que duas instâncias concorrentes alterem as chaves da sessão ao mesmo tempo
+  cancel-in-progress: false
 
 jobs:
   run-bot:
-    name: Executar Sincronização e Relatórios
+    name: Sincronizar Mensagens e Disparar Relatorios
     runs-on: ubuntu-latest
-    timeout-minutes: 5 # Timeout preventivo geral do Job
+    timeout-minutes: 5 # Timeout preventivo caso ocorra algum bloqueio de rede
 
     steps:
-      - name: Checkout do Repositório
+      - name: Checkout do Repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js
+      - name: Setup do Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Instalar Dependências
+      - name: Instalar Dependencias
         run: npm ci
 
-      - name: Compilar TypeScript
+      - name: Verificacao Estrita de Tipos (Quality Gate)
+        run: npx tsc --noEmit
+
+      - name: Build de Producao
         run: npm run build
 
-      - name: Executar Bot Efêmero
+      - name: Executar Bot Efemero (GADAP Hub)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OBRA_GROUP_ID: ${{ secrets.OBRA_GROUP_ID }}
           OBRA_ID: ${{ secrets.OBRA_ID || 'obra_principal' }}
-          TZ: 'America/Sao_Paulo'
+          TZ: 'America/Sao_Paulo' # Fuso horário brasileiro para janelas de relatórios de obra
         run: node dist/index.js
-
