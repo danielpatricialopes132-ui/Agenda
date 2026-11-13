@@ -1,7 +1,7 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { config } from '../config/env';
 
-const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+const genAI = new GoogleGenerativeAI(config.geminiApiKey);
 
 export interface ExtracaoAgendamento {
   is_agendamento: boolean;
@@ -34,29 +34,28 @@ Você DEVE responder rigorosamente no formato JSON.
 `.trim();
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: texto,
-      config: {
-        systemInstruction,
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction,
+      generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
-          type: Type.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
             is_agendamento: {
-              type: Type.BOOLEAN,
+              type: SchemaType.BOOLEAN,
               description: 'Indica se a mensagem é um agendamento ou compromisso de obra',
             },
             data_iso: {
-              type: Type.STRING,
+              type: SchemaType.STRING,
               description: 'Data do evento no formato YYYY-MM-DD',
             },
             horario: {
-              type: Type.STRING,
+              type: SchemaType.STRING,
               description: 'Horário do evento no formato HH:MM (24 horas)',
             },
             descricao: {
-              type: Type.STRING,
+              type: SchemaType.STRING,
               description: 'Descrição concisa e objetiva da atividade ou entrega agendada',
             },
           },
@@ -65,7 +64,9 @@ Você DEVE responder rigorosamente no formato JSON.
       },
     });
 
-    const outputText = response.text;
+    const result = await model.generateContent(texto);
+    const outputText = result.response.text();
+
     if (!outputText) {
       return { is_agendamento: false, data_iso: '', horario: '', descricao: '' };
     }
@@ -77,4 +78,3 @@ Você DEVE responder rigorosamente no formato JSON.
     return { is_agendamento: false, data_iso: '', horario: '', descricao: '' };
   }
 }
-
