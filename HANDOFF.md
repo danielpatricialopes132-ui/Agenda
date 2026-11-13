@@ -5,37 +5,41 @@ Documento vivo de sincronização entre o desenvolvedor humano e os agentes de I
 ---
 
 ## [State]
-`11 - Revamp Frontend SaaS Corporate (GADAP Hub) Concluído`
+`12 - Arquitetura Desacoplada: Setup Local vs Trabalhador Efêmero (GitHub Actions)`
 
 ---
 
 ## [Context]
-A interface do Dashboard local foi completamente refatorada para um padrão **SaaS Corporativo Premium**, eliminando falhas de renderização de listas, separando o HTML/JS em `public/index.html` e integrando **Sidebar de navegação em tela cheia**, **SweetAlert2** para toasts elegantes, e **FullCalendar** com tema escuro.
+A arquitetura do bot foi formalmente separada em dois pontos de entrada totalmente isolados:
+1. **Controle Remoto Local (`src/setup.ts`)**: Servidor Express com interface visual SaaS corporativa em `public/index.html` para login via QR Code, listagem de grupos do WhatsApp e gerenciamento da tabela `obras_config`.
+2. **Trabalhador Efêmero (`src/bot.ts`)**: Script desenhado especificamente para rodar como Cron Job no GitHub Actions a custo zero, durando 75 segundos, consumindo mensagens não lidas, extraindo agendamentos via Gemini, disparando infográficos em imagem e briefings em áudio, e encerrando graciosamente com `process.exit(0)`.
 
 ---
 
 ## [Completed]
-- [x] **Arquitetura Limpa & Clean Code**:
-  - Separação do frontend para o arquivo estático [`public/index.html`](file:///c:/Agenda/public/index.html) servido via `express.static`.
-  - Servidor Express em `src/setup-ui.ts` simplificado, robusto e focado apenas nas rotas REST e orquestração do Baileys.
-- [x] **Layout SaaS Corporativo Premium**:
-  - Sidebar lateral fixa com gradientes, indicador de status dinâmico do Baileys/Supabase e navegação fluida por abas:
-    - **Aba 1: Conexão WhatsApp** (Cartão de QR Code centralizado com detecção de estado conectado).
-    - **Aba 2: Gestão de Obras** (Split view de grupos do WhatsApp vs obras monitorizadas).
-    - **Aba 3: Calendário da Obra** (FullCalendar interativo com dropdown de seleção de obras).
-  - Top Navbar translúcido (`backdrop-blur`) com título de contexto e botão de sincronização forçada.
-- [x] **Correção Crítica da Gestão de Obras (Aba 2)**:
-  - Lista de grupos renderizada em cards horizontais com nome, JID e botão vibrante **"➕ Configurar Obra"** (ou **"✏️ Editar"**).
-  - Painel de obras monitoradas exibindo badges customizadas para cada telefone de engenheiro/mestre (`📱 5511...`) e botão vermelho para exclusão.
-  - Modal interativo com `backdrop-blur-md` para cadastro e edição dos responsáveis.
-- [x] **SweetAlert2 & Toasts**:
-  - Feedback visual profissional para ações de gravação, remoção e sincronização.
-- [x] **Visão de Calendário (Aba 3)**:
-  - Integração do FullCalendar 6 com tema escuro e carregamento dinâmico via `GET /api/agenda/:obra_id`.
+- [x] **Módulo 1: Controle Remoto Local (`src/setup.ts`)**:
+  - Servidor Express dedicado na porta 3000.
+  - Conexão com o Baileys usando `useSupabaseAuthState` exclusivamente para gerar o QR Code inicial e popular o banco.
+  - API REST completa para CRUD de `obras_config` e eventos do FullCalendar.
+  - Nenhum processamento de mensagens ou disparos de cron ocorre neste script.
+- [x] **Módulo 2: Trabalhador Efêmero (`src/bot.ts`)**:
+  - Restaura a sessão do WhatsApp direto da tabela `baileys_auth_state` do Supabase sem necessidade de QR Code.
+  - Lê as mensagens não lidas recebidas via `messages.upsert` e `messaging-history.set`.
+  - Filtro dinâmico: processa apenas mensagens cujos grupos existam em `obras_config`.
+  - Deduplicação rígida consultando a tabela `mensagens_processadas`.
+  - Processamento NLP com Google Gemini (com detecção de conflitos logísticos).
+  - Rotinas de disparos em imagem (PNG de Timeline) e Morning Briefing em áudio nativo (TTS Voice Note / PTT).
+  - Graceful Shutdown programado para 75s com salvamento de credenciais e `process.exit(0)`.
+- [x] **Módulo 3: Workflow do GitHub Actions (`.github/workflows/bot-cron.yml`)**:
+  - Cron a cada 3 horas (`0 */3 * * *`) e gatilho manual `workflow_dispatch`.
+  - Execução direcionada para `node dist/bot.js`.
+  - Mapeamento das secrets (`SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`).
+- [x] **Ajustes no `package.json`**:
+  - Scripts dedicados: `"start:setup": "ts-node src/setup.ts"`, `"start": "node dist/bot.js"`, `"build": "tsc"`.
 
 ---
 
 ## [Pending / Next Steps]
-1. [ ] Acessar `http://localhost:3000` e explorar a nova interface corporativa.
-2. [ ] Testar a adição de uma nova obra ou edição de responsáveis pelo novo modal.
-3. [ ] Executar `git push origin main` para atualizar o repositório remoto no GitHub.
+1. [ ] No painel do Render, pausar ou desativar o Web Service (já que a execução será efêmera via GitHub Actions).
+2. [ ] No GitHub (`Settings > Secrets and variables > Actions`), verificar se as secrets estão configuradas (`SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`).
+3. [ ] Executar o `git push origin main` para atualizar o workflow no GitHub Actions.
