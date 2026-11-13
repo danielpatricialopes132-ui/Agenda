@@ -90,3 +90,4 @@ Você DEVE responder única e exclusivamente no schema JSON definido.
     return { is_agendamento: false, data_iso: '', horario: '', descricao: '' };
   }
 }
+
