@@ -14,13 +14,17 @@ import { useSupabaseAuthState, supabase } from './lib/useSupabaseAuthState';
 import { extrairAgendamento, detectarConflitosAgenda } from './lib/aiProcessor';
 import { gerarImagemAgendaSemana, EventoRelatorio } from './lib/reportGenerator';
 import { gerarAudioBriefing } from './lib/audioBriefing';
+import { acquireLock, startHeartbeat, releaseLock } from './lib/mutex';
 
 dotenv.config();
+
+// Identificação da Instância Distribuída
+const instanceName = process.env.RENDER ? 'render-prod' : 'local-dev';
 
 // ==============================================================================
 // 1. Estado Global da Aplicação
 // ==============================================================================
-type StatusConexao = 'desconectado' | 'qr' | 'conectado';
+type StatusConexao = 'desconectado' | 'qr' | 'conectado' | 'modo_leitura';
 
 interface GrupoInfo {
   id: string;
@@ -196,14 +200,13 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
   if (obras.size === 0) return;
 
   const agora = new Date();
-  const diaSemana = agora.getDay(); // 0: Dom, 1: Seg, 2: Ter, ..., 5: Sex, 6: Sáb
+  const diaSemana = agora.getDay();
   const hora = agora.getHours();
   const hojeIso = agora.toISOString().split('T')[0];
 
   console.log(`[Relatórios] Verificando regras de envio: Dia=${diaSemana}, Hora=${hora}h, Data=${hojeIso}`);
 
   for (const [obraId, configObra] of obras.entries()) {
-    // Clean Name garantido via SELECT/Cache em obras_config (nunca o subject bruto do WhatsApp)
     const cleanName = configObra.nome_obra?.trim() || 'Obra Sem Nome';
 
     // 1. Segunda-feira pela manhã (entre 07:00 e 11:59): Infográfico Semanal em Imagem
@@ -246,12 +249,12 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
         const eventos = await buscarEventosDoDia(obraId, hojeIso);
 
         try {
-          // A) Disparo do Infográfico em Imagem usando o Clean Name
+          // A) Disparo do Infográfico em Imagem
           const imagemBuffer = await gerarImagemAgendaSemana(cleanName, eventos, 'DIARIO');
           const caption = `🌅 *Lembretes do Dia - ${cleanName}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
           await client.sendMessage(obraId, { image: imagemBuffer, caption });
 
-          // B) Disparo do Morning Briefing em Áudio (PTT) usando o Clean Name
+          // B) Disparo do Morning Briefing em Áudio (PTT)
           try {
             const audioBuffer = await gerarAudioBriefing(eventos, cleanName);
             await client.sendMessage(obraId, {
@@ -365,7 +368,7 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
 }
 
 // ==============================================================================
-// 5. Conexão Baileys Unificada (com Reconexão Automática e Tratamento 440/Conflict)
+// 5. Conexão Baileys Unificada (com Reconexão Automática)
 // ==============================================================================
 let timeoutReconexao: NodeJS.Timeout | null = null;
 
@@ -430,15 +433,12 @@ async function iniciarBaileys() {
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      // 440 = connectionReplaced (outra instância ou setup conectou).
-      // DisconnectReason.loggedOut = 401.
       const isLoggedOut = statusCode === DisconnectReason.loggedOut;
       status = 'desconectado';
       console.warn(`[WhatsApp] Conexão encerrada (statusCode: ${statusCode}).`);
 
       if (!isLoggedOut) {
-        // Se foi código 440 (sessão substituída), aguarda um intervalo maior antes de reconectar para evitar loop
-        const delayMs = statusCode === 440 ? 10000 : 4000;
+        const delayMs = statusCode === 440 ? 15000 : 4000;
         console.log(`[WhatsApp] Agendando reconexão em ${delayMs / 1000}s...`);
         timeoutReconexao = setTimeout(() => iniciarBaileys(), delayMs);
       } else {
@@ -481,6 +481,7 @@ app.get('/api/wake', async (req: Request, res: Response) => {
     status: 'awake',
     time: new Date().toISOString(),
     whatsapp: status,
+    instanceName,
     obrasMonitoradas: obrasCache.size,
   });
 });
@@ -490,6 +491,7 @@ app.get('/api/status', (req: Request, res: Response) => {
   res.json({
     status,
     qrCodeImage,
+    instanceName,
     gruposLista: Array.isArray(gruposLista) ? gruposLista : [],
   });
 });
@@ -644,14 +646,38 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // ==============================================================================
-// 7. Inicialização do Servidor Unificado (Render Web Service)
+// 7. Inicialização do Servidor com Trava Lógica (Distributed Mutex)
 // ==============================================================================
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('\n=============================================================');
-  console.log('🚀 [GADAP Hub] SERVIDOR UNIFICADO ONLINE (RENDER WEB SERVICE)');
+  console.log(`🚀 [GADAP Hub] SERVIDOR UNIFICADO ONLINE [${instanceName.toUpperCase()}]`);
   console.log(`🌐 Porta aberta e escutando: ${PORT}`);
   console.log(`⏰ Rota do despertador pronta: /api/wake`);
   console.log('=============================================================\n');
 
-  iniciarBaileys();
+  // Trava Distribuída para Concorrência Baileys
+  console.log(`[MUTEX] Verificando posse do lock para a instância "${instanceName}"...`);
+  const canStartBot = await acquireLock(instanceName);
+
+  if (canStartBot) {
+    console.log(`✅ [MUTEX] Lock concedido! Iniciando conexão Baileys e Heartbeat...`);
+    startHeartbeat(instanceName);
+    iniciarBaileys();
+  } else {
+    status = 'modo_leitura';
+    console.warn('⚠️ [MUTEX] WhatsApp já está conectado noutra instância. Iniciando apenas o Dashboard (Modo Leitura).');
+  }
+});
+
+// Graceful shutdown liberando lock
+process.on('SIGTERM', async () => {
+  console.log(`[Server] Recebido SIGTERM. Liberando lock de "${instanceName}"...`);
+  await releaseLock(instanceName);
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log(`[Server] Recebido SIGINT. Liberando lock de "${instanceName}"...`);
+  await releaseLock(instanceName);
+  process.exit(0);
 });
