@@ -13,21 +13,69 @@ import { extrairAgendamento } from './lib/aiProcessor';
 
 dotenv.config();
 
-const OBRA_GROUP_ID = process.env.OBRA_GROUP_ID || '';
-const OBRA_ID = process.env.OBRA_ID || 'obra_principal';
-const EXECUTION_TIMEOUT_MS = 60 * 1000; // Janela efêmera máxima de 60 segundos
-
+const EXECUTION_TIMEOUT_MS = 60 * 1000; // Janela efêmera de 60 segundos
 let sock: WASocket | null = null;
 let saveCredsFn: (() => Promise<void>) | null = null;
 let shutdownTriggered = false;
 
 // ==============================================================================
-// 1. Operações no Banco de Dados (Supabase) com Tratamento e Logs Estruturados
+// Cache em Memória de Obras Monitorizadas (Multi-Obras)
 // ==============================================================================
+interface ObraConfig {
+  obra_id: string;
+  nome_obra: string;
+  responsaveis: string[];
+  ativa: boolean;
+}
+
+let obrasCache: Map<string, ObraConfig> = new Map();
+let ultimaAtualizacaoObras = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutos
 
 /**
- * Consulta se uma mensagem específica já foi processada anteriormente.
+ * Atualiza o cache local de obras ativas consultando o Supabase.
  */
+async function carregarObrasMonitoradas(forcar = false): Promise<Map<string, ObraConfig>> {
+  const agora = Date.now();
+  if (!forcar && obrasCache.size > 0 && agora - ultimaAtualizacaoObras < CACHE_TTL_MS) {
+    return obrasCache;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('obras_config')
+      .select('*')
+      .eq('ativa', true);
+
+    if (error) {
+      console.warn('[DB Multi-Obras] Aviso ao consultar obras_config:', error.message);
+      return obrasCache;
+    }
+
+    const novoMapa = new Map<string, ObraConfig>();
+    for (const item of data || []) {
+      novoMapa.set(item.obra_id, {
+        obra_id: item.obra_id,
+        nome_obra: item.nome_obra,
+        responsaveis: Array.isArray(item.responsaveis) ? item.responsaveis : [],
+        ativa: Boolean(item.ativa),
+      });
+    }
+
+    obrasCache = novoMapa;
+    ultimaAtualizacaoObras = agora;
+    console.log(`[DB Multi-Obras] Cache de obras ativas atualizado: ${obrasCache.size} obras monitoradas.`);
+  } catch (err) {
+    console.error('[DB Multi-Obras] Exceção ao atualizar cache de obras:', err);
+  }
+
+  return obrasCache;
+}
+
+// ==============================================================================
+// Operações no Banco de Dados (Supabase)
+// ==============================================================================
+
 async function jaProcessouMensagem(messageId: string): Promise<boolean> {
   try {
     const { data, error } = await supabase
@@ -47,9 +95,6 @@ async function jaProcessouMensagem(messageId: string): Promise<boolean> {
   }
 }
 
-/**
- * Registra uma mensagem na tabela de deduplicação mensagens_processadas.
- */
 async function registrarMensagemProcessada(messageId: string, remoteJid: string): Promise<void> {
   try {
     const { error } = await supabase
@@ -60,20 +105,22 @@ async function registrarMensagemProcessada(messageId: string, remoteJid: string)
       console.error(`[DB] Falha ao registrar mensagem processada "${messageId}":`, error.message);
     }
   } catch (err) {
-    console.error(`[DB] Exceção ao inserir mensagem_processada "${messageId}":`, err);
+    console.error(`[DB] Exceção ao registrar mensagem_processada "${messageId}":`, err);
   }
 }
 
-/**
- * Salva um compromisso confirmado na tabela agenda_obra.
- */
-async function salvarAgendamento(dataEvento: string, horario: string | null, descricao: string): Promise<boolean> {
+async function salvarAgendamento(
+  obraId: string,
+  dataEvento: string,
+  horario: string | null,
+  descricao: string
+): Promise<boolean> {
   try {
     const { error } = await supabase
       .from('agenda_obra')
       .insert([
         {
-          obra_id: OBRA_ID,
+          obra_id: obraId,
           data_evento: dataEvento,
           horario: horario || '08:00',
           descricao: descricao,
@@ -81,7 +128,7 @@ async function salvarAgendamento(dataEvento: string, horario: string | null, des
       ]);
 
     if (error) {
-      console.error('[DB] Erro ao gravar evento em agenda_obra:', error.message);
+      console.error('[DB] Erro ao salvar agendamento:', error.message);
       return false;
     }
     return true;
@@ -91,41 +138,33 @@ async function salvarAgendamento(dataEvento: string, horario: string | null, des
   }
 }
 
-/**
- * Verifica idempotência dos relatórios (evita múltiplos envios no mesmo dia/janela).
- */
-async function relatorioJaEnviado(tipo: 'SEMANAL' | 'DIARIO', dataRef: string): Promise<boolean> {
+async function relatorioJaEnviado(obraId: string, tipo: 'SEMANAL' | 'DIARIO', dataRef: string): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('disparos_executados')
       .select('id')
+      .eq('obra_id', obraId)
       .eq('tipo_disparo', tipo)
       .eq('referencia_data', dataRef)
       .maybeSingle();
 
     if (error) {
-      // Se a tabela ainda não existir, apenas avisa sem quebrar o fluxo
-      console.warn(`[DB] Não foi possível verificar disparos_executados (${tipo}):`, error.message);
       return false;
     }
     return !!data;
-  } catch (err) {
-    console.warn(`[DB] Exceção ao verificar tabela disparos_executados:`, err);
+  } catch {
     return false;
   }
 }
 
-/**
- * Marca o envio do relatório para garantir idempotência.
- */
-async function marcarRelatorioEnviado(tipo: 'SEMANAL' | 'DIARIO', dataRef: string): Promise<void> {
+async function marcarRelatorioEnviado(obraId: string, tipo: 'SEMANAL' | 'DIARIO', dataRef: string): Promise<void> {
   try {
     const { error } = await supabase
       .from('disparos_executados')
-      .insert([{ tipo_disparo: tipo, referencia_data: dataRef }]);
+      .insert([{ obra_id: obraId, tipo_disparo: tipo, referencia_data: dataRef }]);
 
     if (error && error.code !== '23505') {
-      console.warn(`[DB] Não foi possível registrar disparo ${tipo}:`, error.message);
+      console.warn(`[DB] Aviso ao registrar disparo ${tipo} para ${obraId}:`, error.message);
     }
   } catch (err) {
     console.warn(`[DB] Exceção ao registrar disparo executado:`, err);
@@ -133,118 +172,152 @@ async function marcarRelatorioEnviado(tipo: 'SEMANAL' | 'DIARIO', dataRef: strin
 }
 
 // ==============================================================================
-// 2. Motor de Disparos de Relatórios Periódicos
+// Motor de Disparos de Relatórios Multi-Obras (Grupo + Telefones dos Responsáveis)
 // ==============================================================================
 
-async function processarRelatorios(client: WASocket): Promise<void> {
-  if (!OBRA_GROUP_ID) {
-    console.warn('[Relatórios] OBRA_GROUP_ID não configurado. Disparos ignorados.');
+async function processarRelatoriosMultiObras(client: WASocket): Promise<void> {
+  const obras = await carregarObrasMonitoradas();
+  if (obras.size === 0) {
+    console.log('[Relatórios Multi-Obras] Nenhuma obra ativa cadastrada. Disparos ignorados.');
     return;
   }
 
   const agora = new Date();
-  const diaSemana = agora.getDay(); // 0: Dom, 1: Seg, 2: Ter, 3: Qua, 4: Qui, 5: Sex, 6: Sáb
+  const diaSemana = agora.getDay(); // 0: Dom, 1: Seg, 2: Ter, ..., 5: Sex, 6: Sáb
   const hora = agora.getHours();
   const hojeIso = agora.toISOString().split('T')[0];
 
-  console.log(`[Relatórios] Analisando regras de envio: Dia=${diaSemana}, Hora=${hora}h, Data=${hojeIso}`);
+  console.log(`[Relatórios Multi-Obras] Analisando ${obras.size} obras. Dia=${diaSemana}, Hora=${hora}h, Data=${hojeIso}`);
 
-  // Regra 1: Segunda-feira pela manhã (entre 07:00 e 11:59) - Agenda da Semana
-  if (diaSemana === 1 && hora >= 7 && hora <= 11) {
-    const jaEnviado = await relatorioJaEnviado('SEMANAL', hojeIso);
-    if (!jaEnviado) {
-      console.log('📋 [Relatório Semanal] Compilando eventos dos próximos 5 dias...');
-      const em5Dias = new Date();
-      em5Dias.setDate(agora.getDate() + 5);
-      const dataFimIso = em5Dias.toISOString().split('T')[0];
+  for (const [obraId, configObra] of obras.entries()) {
+    // 1. Segunda-feira pela manhã (entre 07:00 e 11:59): Relatório Semanal
+    if (diaSemana === 1 && hora >= 7 && hora <= 11) {
+      const jaEnviado = await relatorioJaEnviado(obraId, 'SEMANAL', hojeIso);
+      if (!jaEnviado) {
+        console.log(`📋 [Relatório Semanal] Compilando para "${configObra.nome_obra}"...`);
+        const em5Dias = new Date();
+        em5Dias.setDate(agora.getDate() + 5);
+        const dataFimIso = em5Dias.toISOString().split('T')[0];
 
-      const { data: eventos, error } = await supabase
-        .from('agenda_obra')
-        .select('*')
-        .eq('obra_id', OBRA_ID)
-        .gte('data_evento', hojeIso)
-        .lte('data_evento', dataFimIso)
-        .order('data_evento', { ascending: true })
-        .order('horario', { ascending: true });
+        const { data: eventos, error } = await supabase
+          .from('agenda_obra')
+          .select('*')
+          .eq('obra_id', obraId)
+          .gte('data_evento', hojeIso)
+          .lte('data_evento', dataFimIso)
+          .order('data_evento', { ascending: true })
+          .order('horario', { ascending: true });
 
-      if (!error) {
-        let mensagem = '📋 *AGENDA DA SEMANA - GADAP HUB*\n_Previsão dos próximos 5 dias de obra:_\n\n';
-        if (!eventos || eventos.length === 0) {
-          mensagem += 'Nenhum agendamento cadastrado para os próximos dias.\nTenham todos uma excelente semana de trabalho!';
-        } else {
-          eventos.forEach((ev) => {
-            const [ano, mes, dia] = ev.data_evento.split('-');
-            mensagem += `🗓️ *${dia}/${mes}* às *${ev.horario}*\n📌 ${ev.descricao}\n\n`;
-          });
-          mensagem += 'Qualquer alteração ou novo fornecedor, informem neste grupo.';
+        if (!error) {
+          let mensagem = `📋 *AGENDA DA SEMANA - ${configObra.nome_obra.toUpperCase()}*\n_Previsão dos próximos 5 dias de obra:_\n\n`;
+          if (!eventos || eventos.length === 0) {
+            mensagem += 'Nenhum agendamento cadastrado para os próximos dias.\nTenham todos uma excelente semana de trabalho!';
+          } else {
+            eventos.forEach((ev) => {
+              const [ano, mes, dia] = ev.data_evento.split('-');
+              mensagem += `🗓️ *${dia}/${mes}* às *${ev.horario}*\n📌 ${ev.descricao}\n\n`;
+            });
+            mensagem += 'Qualquer alteração ou novo fornecedor, favor avisar neste grupo.';
+          }
+
+          // Dispara no grupo principal da obra
+          await client.sendMessage(obraId, { text: mensagem });
+
+          // Dispara individualmente para cada responsável configurado
+          for (const telefone of configObra.responsaveis) {
+            const numeroLimpo = telefone.replace(/\D/g, '');
+            if (numeroLimpo.length >= 10) {
+              const jidPrivado = `${numeroLimpo}@s.whatsapp.net`;
+              try {
+                await client.sendMessage(jidPrivado, { text: mensagem });
+                console.log(`📨 Relatório semanal enviado no privado para ${numeroLimpo}`);
+              } catch (privErr) {
+                console.error(`Falha ao enviar relatório semanal para ${numeroLimpo}:`, privErr);
+              }
+            }
+          }
+
+          await marcarRelatorioEnviado(obraId, 'SEMANAL', hojeIso);
+          console.log(`✅ Relatório semanal disparado para a obra "${configObra.nome_obra}".`);
         }
-
-        await client.sendMessage(OBRA_GROUP_ID, { text: mensagem });
-        await marcarRelatorioEnviado('SEMANAL', hojeIso);
-        console.log('✅ [Relatórios] Agenda da semana enviada e registrada com sucesso!');
       }
-    } else {
-      console.log('[Relatórios] Agenda da semana já enviada anteriormente hoje.');
     }
-  }
 
-  // Regra 2: Terça a Sexta pela manhã (entre 06:00 e 09:59) - Lembretes do Dia
-  if (diaSemana >= 2 && diaSemana <= 5 && hora >= 6 && hora <= 9) {
-    const jaEnviado = await relatorioJaEnviado('DIARIO', hojeIso);
-    if (!jaEnviado) {
-      console.log('🌅 [Relatório Diário] Compilando compromissos agendados para hoje...');
-      const { data: eventos, error } = await supabase
-        .from('agenda_obra')
-        .select('*')
-        .eq('obra_id', OBRA_ID)
-        .eq('data_evento', hojeIso)
-        .order('horario', { ascending: true });
+    // 2. Terça a Sexta pela manhã (entre 06:00 e 09:59): Relatório Diário
+    if (diaSemana >= 2 && diaSemana <= 5 && hora >= 6 && hora <= 9) {
+      const jaEnviado = await relatorioJaEnviado(obraId, 'DIARIO', hojeIso);
+      if (!jaEnviado) {
+        console.log(`🌅 [Relatório Diário] Compilando para "${configObra.nome_obra}"...`);
+        const { data: eventos, error } = await supabase
+          .from('agenda_obra')
+          .select('*')
+          .eq('obra_id', obraId)
+          .eq('data_evento', hojeIso)
+          .order('horario', { ascending: true });
 
-      if (!error) {
-        let mensagem = '🌅 *LEMBRETES DO DIA - GADAP HUB*\n_Atividades e entregas programadas para hoje:_\n\n';
-        if (!eventos || eventos.length === 0) {
-          mensagem += 'Nenhum compromisso ou entrega de material prevista para hoje. Bom expediente!';
-        } else {
-          eventos.forEach((ev) => {
-            mensagem += `⏰ *${ev.horario}* - ${ev.descricao}\n`;
-          });
-          mensagem += '\nFiquem atentos aos recebimentos e frentes de serviço!';
+        if (!error) {
+          let mensagem = `🌅 *LEMBRETES DO DIA - ${configObra.nome_obra.toUpperCase()}*\n_Atividades e entregas programadas para hoje:_\n\n`;
+          if (!eventos || eventos.length === 0) {
+            mensagem += 'Nenhum compromisso ou entrega de material prevista para hoje. Bom expediente!';
+          } else {
+            eventos.forEach((ev) => {
+              mensagem += `⏰ *${ev.horario}* - ${ev.descricao}\n`;
+            });
+            mensagem += '\nFiquem atentos aos recebimentos e frentes de serviço!';
+          }
+
+          // Dispara no grupo principal da obra
+          await client.sendMessage(obraId, { text: mensagem });
+
+          // Dispara individualmente para cada responsável configurado
+          for (const telefone of configObra.responsaveis) {
+            const numeroLimpo = telefone.replace(/\D/g, '');
+            if (numeroLimpo.length >= 10) {
+              const jidPrivado = `${numeroLimpo}@s.whatsapp.net`;
+              try {
+                await client.sendMessage(jidPrivado, { text: mensagem });
+                console.log(`📨 Lembrete diário enviado no privado para ${numeroLimpo}`);
+              } catch (privErr) {
+                console.error(`Falha ao enviar lembrete diário para ${numeroLimpo}:`, privErr);
+              }
+            }
+          }
+
+          await marcarRelatorioEnviado(obraId, 'DIARIO', hojeIso);
+          console.log(`✅ Relatório diário disparado para a obra "${configObra.nome_obra}".`);
         }
-
-        await client.sendMessage(OBRA_GROUP_ID, { text: mensagem });
-        await marcarRelatorioEnviado('DIARIO', hojeIso);
-        console.log('✅ [Relatórios] Lembretes do dia enviados e registrados com sucesso!');
       }
-    } else {
-      console.log('[Relatórios] Lembretes do dia já enviados anteriormente hoje.');
     }
   }
 }
 
 // ==============================================================================
-// 3. Processamento Individual e Deduplicação de Mensagens
+// Processamento Dinâmico de Mensagens (Filtro por obras_config)
 // ==============================================================================
 
 async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: WASocket): Promise<void> {
-  // Ignora mensagens enviadas pelo próprio bot
   if (msg.key.fromMe) return;
 
   const remoteJid = msg.key.remoteJid;
   const messageId = msg.key.id;
   if (!remoteJid || !messageId) return;
 
-  // Filtra exclusivamente o grupo configurado
-  if (OBRA_GROUP_ID && remoteJid !== OBRA_GROUP_ID) {
+  // Filtro Dinâmico: Verifica se o remoteJid pertence a uma obra cadastrada e ativa
+  const obras = await carregarObrasMonitoradas();
+  const configObra = obras.get(remoteJid);
+
+  if (!configObra) {
+    // Não é um grupo monitorado pelo GADAP Hub; ignora silenciosamente
     return;
   }
 
-  // Deduplicação: checa se já foi processada no Supabase
+  // Deduplicação: verifica se a mensagem já foi lida
   const processada = await jaProcessouMensagem(messageId);
   if (processada) {
     return;
   }
 
-  // Extrai o texto da mensagem (mensagens diretas, respostas ou mídias com legenda)
+  // Extrai texto da mensagem
   const texto =
     msg.message?.conversation ||
     msg.message?.extendedTextMessage?.text ||
@@ -252,40 +325,37 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
     msg.message?.videoMessage?.caption;
 
   if (!texto || texto.trim().length === 0) {
-    // Marca como lida para não analisar mensagens vazias repetidamente
     await registrarMensagemProcessada(messageId, remoteJid);
     return;
   }
 
-  console.log(`[WhatsApp] Mensagem recebida no grupo da obra: "${texto}"`);
+  console.log(`[WhatsApp - Obra "${configObra.nome_obra}"]: "${texto}"`);
 
-  // Extração via IA (Gemini) com base na data de hoje
+  // Extração via Gemini com a data de hoje como base
   const hojeIso = new Date().toISOString().split('T')[0];
   const resultado = await extrairAgendamento(texto, hojeIso);
 
   if (resultado.is_agendamento && resultado.data_iso && resultado.descricao) {
-    console.log('🎯 [AI] Agendamento identificado com sucesso:', resultado);
-    const salvo = await salvarAgendamento(resultado.data_iso, resultado.horario, resultado.descricao);
+    console.log(`🎯 [AI - ${configObra.nome_obra}] Agendamento detectado:`, resultado);
+    const salvo = await salvarAgendamento(remoteJid, resultado.data_iso, resultado.horario, resultado.descricao);
 
     if (salvo) {
       try {
-        // Reage à mensagem do usuário com emoji de calendário "📅"
         await client.sendMessage(remoteJid, {
           react: { text: '📅', key: msg.key },
         });
-        console.log('✨ [WhatsApp] Reação 📅 enviada para a mensagem original!');
+        console.log(`✨ Reação 📅 enviada no grupo "${configObra.nome_obra}"!`);
       } catch (err) {
-        console.error('[WhatsApp] Falha ao reagir à mensagem:', err);
+        console.error('Erro ao enviar reação no WhatsApp:', err);
       }
     }
   }
 
-  // Registra a mensagem na tabela de deduplicação
   await registrarMensagemProcessada(messageId, remoteJid);
 }
 
 // ==============================================================================
-// 4. Fluxo de Inicialização e Graceful Shutdown
+// Ciclo Efêmero e Graceful Shutdown
 // ==============================================================================
 
 async function realizarGracefulShutdown(motivo: string) {
@@ -300,20 +370,22 @@ async function realizarGracefulShutdown(motivo: string) {
     }
     if (sock) {
       sock.end(undefined);
-      console.log('[WhatsApp] Conexão do socket finalizada.');
+      console.log('[WhatsApp] Conexão finalizada com sucesso.');
     }
   } catch (err) {
     console.error('[Shutdown] Erro ao consolidar sessão durante shutdown:', err);
   } finally {
-    console.log('👋 [GADAP Hub] Ciclo efêmero concluído. Encerrando processo...');
+    console.log('👋 [GADAP Hub] Ciclo efêmero finalizado. Encerrando processo...');
     process.exit(0);
   }
 }
 
 async function main() {
-  console.log('🚀 [GADAP Hub Bot] Inicializando runner serverless efêmero...');
+  console.log('🚀 [GADAP Hub Bot] Inicializando runner efêmero Multi-Obras...');
 
-  // 1. Inicializa com o adaptador useSupabaseAuthState
+  // Inicializa a lista de obras monitoradas
+  await carregarObrasMonitoradas(true);
+
   const { state, saveCreds } = await useSupabaseAuthState('obra_principal');
   saveCredsFn = saveCreds;
 
@@ -324,18 +396,13 @@ async function main() {
     syncFullHistory: false,
   });
 
-  // Atualização contínua de credenciais
   sock.ev.on('creds.update', async () => {
-    if (saveCredsFn) {
-      await saveCredsFn();
-    }
+    if (saveCredsFn) await saveCredsFn();
   });
 
-  // Evento de conexão
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    // Se a sessão não existir (primeira inicialização local), exibe o QR Code
     if (qr) {
       console.log('\n======================================================');
       console.log('⚡ SESSÃO NÃO ENCONTRADA. ESCANEIE O QR CODE ABAIXO:');
@@ -346,21 +413,19 @@ async function main() {
     if (connection === 'open') {
       console.log('✅ [WhatsApp] Conectado e autenticado com sucesso!');
       if (sock) {
-        await processarRelatorios(sock);
+        await processarRelatoriosMultiObras(sock);
       }
     }
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      console.warn(`[WhatsApp] Conexão encerrada. Código de status: ${statusCode}`);
-      // Se for logout explícito do dispositivo
+      console.warn(`[WhatsApp] Conexão encerrada (statusCode: ${statusCode}).`);
       if (statusCode === DisconnectReason.loggedOut) {
-        console.error('[WhatsApp] Dispositivo desconectado (loggedOut). Novo QR Code necessário.');
+        console.error('[WhatsApp] Dispositivo deslogado. Novo QR Code necessário.');
       }
     }
   });
 
-  // Mensagens recebidas em tempo real ou pendentes na fila
   sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
       if (sock) {
@@ -369,9 +434,8 @@ async function main() {
     }
   });
 
-  // Mensagens sincronizadas pelo histórico do WhatsApp
   sock.ev.on('messaging-history.set', async ({ messages }) => {
-    console.log(`[WhatsApp] Histórico de mensagens recebido (${messages.length} mensagens). Sincronizando...`);
+    console.log(`[WhatsApp] Histórico de mensagens recebido (${messages.length} msgs). Sincronizando...`);
     for (const msg of messages) {
       if (sock) {
         await processarMensagemIndividual(msg, sock);
@@ -379,13 +443,11 @@ async function main() {
     }
   });
 
-  // Timeout fixo de 60 segundos para desligamento controlado
   setTimeout(() => {
     realizarGracefulShutdown(`Timeout de ${EXECUTION_TIMEOUT_MS / 1000}s atingido`);
   }, EXECUTION_TIMEOUT_MS);
 }
 
-// Captura de sinais do sistema operacional
 process.on('SIGINT', () => realizarGracefulShutdown('SIGINT recebido'));
 process.on('SIGTERM', () => realizarGracefulShutdown('SIGTERM recebido'));
 

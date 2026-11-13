@@ -5,44 +5,42 @@ Documento vivo de sincronização entre o desenvolvedor humano e os agentes de I
 ---
 
 ## [State]
-`06 - Dashboard de Setup e Onboarding (src/setup-ui.ts) Concluído`
+`07 - Arquitetura Multi-Obras Dinâmica Concluída`
 
 ---
 
 ## [Context]
-O assistente de obras do ecossistema GADAP Hub possui agora um **Dashboard Visual de Setup** (`src/setup-ui.ts`). Esta interface local Express + Tailwind CSS permite ao gestor ou desenvolvedor escanear o QR Code de forma amigável no navegador e obter a listagem de todos os IDs dos grupos de WhatsApp para configuração da variável `OBRA_GROUP_ID`.
+A arquitetura do bot de WhatsApp foi completamente evoluída de um modelo fixo (via `.env`) para um modelo dinâmico **Multi-Obras**, suportando múltiplos canteiros de obras simultâneos geridos pelo Dashboard local (`src/setup-ui.ts`) e persistidos na tabela `obras_config` do Supabase.
 
 ---
 
 ## [Completed]
-- [x] **Passo 1**: Setup inicial, criação de `package.json`, `tsconfig.json`, `AGENTS.md` e `HANDOFF.md`.
-- [x] **Passo 2**: Implementação do adaptador `src/lib/useSupabaseAuthState.ts` com persistência remota no Supabase e cache em memória.
-- [x] **Passo 3**: Implementação do processador de IA em `src/lib/aiProcessor.ts` com Gemini 1.5 Flash e schema JSON restrito.
-- [x] **Passo 4**: Consolidação do motor principal em `src/index.ts` (deduplicação, reação `📅`, motor de relatórios periódicos e graceful shutdown aos 60s).
-- [x] **Passo 5**: Workflow do GitHub Actions em `.github/workflows/bot-cron.yml` com concorrência e cron a cada 3h.
-- [x] **Passo 6 (Onboarding UI)**: Implementação do arquivo `src/setup-ui.ts`:
-  - Servidor Express na porta 3000 com rota principal `/` e API `/api/status`.
-  - Integração Baileys via `useSupabaseAuthState` convertendo o QR Code para base64 com `qrcode.toDataURL()`.
-  - Captura e listagem dos grupos participantes com `sock.groupFetchAllParticipating()`.
-  - Interface moderna responsiva com Tailwind CSS, polling dinâmico a cada 2s e botão de copiar ID para clipboard.
-  - Script `"setup:ui": "tsx src/setup-ui.ts"` adicionado no `package.json`.
+- [x] **Módulo 1: Base de Dados (Supabase)**:
+  - Script DDL atualizado em `supabase_schema.sql` com a tabela `obras_config` (`obra_id [PK]`, `nome_obra`, `responsaveis [TEXT[]]`, `ativa [BOOL]`, `created_at`).
+  - Relacionamento de chave estrangeira em `agenda_obra` para `obras_config(obra_id)`.
+  - Atualização da tabela `disparos_executados` com constraint única por `obra_id`, `tipo_disparo` e `referencia_data`.
+- [x] **Módulo 2: Backend do Dashboard (`src/setup-ui.ts`)**:
+  - `GET /api/obras`: Consulta todas as obras cadastradas no Supabase.
+  - `POST /api/obras`: Cadastra/atualiza obras com higienização dos números dos responsáveis.
+  - `DELETE /api/obras/:id`: Remove ou inativa o monitoramento de uma obra.
+- [x] **Módulo 3: UX/UI do Dashboard (`src/setup-ui.ts`)**:
+  - Tela dividida em duas colunas: **Grupos Disponíveis no WhatsApp** (esquerda) e **Obras Monitorizadas** (direita).
+  - Botão azul **"Configurar Obra"** abrindo modal interativo em Tailwind CSS com nome da obra, JID bloqueado e textarea para múltiplos números de responsáveis.
+  - Cards visuais com tags de responsáveis, status ativo e botão de remoção rápida.
+- [x] **Módulo 4: Motor do Bot (`src/index.ts`)**:
+  - Filtro dinâmico: o bot consulta a tabela `obras_config` via cache em memória com TTL de 2 minutos para verificar se o grupo é monitorado, eliminando dependência da variável estática `OBRA_GROUP_ID`.
+  - Agrupamento de agendamentos por `obra_id`.
+  - Motor de relatórios multi-obras com disparos no grupo da obra e em privado para cada telefone cadastrado em `responsaveis` (`@s.whatsapp.net`).
 
 ---
 
 ## [Pending / Next Steps]
-1. [ ] **Executar o Dashboard Localmente**:
-   Executar `npm run setup:ui` e abrir `http://localhost:3000` para escanear o QR Code e copiar o ID do grupo de obra desejado.
-2. [ ] **Configurar Secrets no GitHub**:
-   Adicionar no repositório (`Settings > Secrets and variables > Actions`):
-   - `SUPABASE_URL`
-   - `SUPABASE_KEY`
-   - `GEMINI_API_KEY`
-   - `OBRA_GROUP_ID` (obtido no Dashboard)
-   - `OBRA_ID` (opcional, padrão `obra_principal`)
-3. [ ] **Criação da tabela de controle no Supabase**:
-   Executar no SQL Editor do Supabase a tabela `disparos_executados` para idempotência dos relatórios diários/semanais.
+1. [ ] **Criar a tabela `obras_config` no Supabase**:
+   Executar o script DDL no SQL Editor do Supabase para criar `obras_config` e ajustar constraints.
+2. [ ] **Iniciar o Dashboard e Cadastrar as Obras**:
+   Executar `npm run setup:ui`, escanear o QR Code em `http://localhost:3000` e configurar os grupos de obra desejados com seus respectivos responsáveis.
 
 ---
 
 ## [Known Issues / Blockers]
-- Nenhuma pendência técnica. O pareamento visual está pronto para execução pelo usuário.
+- Necessário rodar o comando DDL de `obras_config` no Supabase para que a nova API e o bot persistam as configurações dinâmicas.
