@@ -15,103 +15,145 @@ dotenv.config();
 
 const OBRA_GROUP_ID = process.env.OBRA_GROUP_ID || '';
 const OBRA_ID = process.env.OBRA_ID || 'obra_principal';
-const EXECUTION_TIMEOUT_MS = 60 * 1000; // Janela efêmera de 60 segundos
+const EXECUTION_TIMEOUT_MS = 60 * 1000; // Janela efêmera máxima de 60 segundos
 
 let sock: WASocket | null = null;
 let saveCredsFn: (() => Promise<void>) | null = null;
+let shutdownTriggered = false;
 
 // ==============================================================================
-// Funções Auxiliares de Banco de Dados (Supabase)
+// 1. Operações no Banco de Dados (Supabase) com Tratamento e Logs Estruturados
 // ==============================================================================
 
+/**
+ * Consulta se uma mensagem específica já foi processada anteriormente.
+ */
 async function jaProcessouMensagem(messageId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('mensagens_processadas')
-    .select('message_id')
-    .eq('message_id', messageId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('mensagens_processadas')
+      .select('message_id')
+      .eq('message_id', messageId)
+      .maybeSingle();
 
-  if (error) {
-    console.error(`[DB] Erro ao checar mensagem ${messageId}:`, error.message);
+    if (error) {
+      console.error(`[DB] Erro ao consultar mensagem_id "${messageId}":`, error.message);
+      return false;
+    }
+    return !!data;
+  } catch (err) {
+    console.error(`[DB] Exceção ao checar mensagem "${messageId}":`, err);
     return false;
   }
-  return !!data;
 }
 
+/**
+ * Registra uma mensagem na tabela de deduplicação mensagens_processadas.
+ */
 async function registrarMensagemProcessada(messageId: string, remoteJid: string): Promise<void> {
-  const { error } = await supabase
-    .from('mensagens_processadas')
-    .insert([{ message_id: messageId, remote_jid: remoteJid }]);
+  try {
+    const { error } = await supabase
+      .from('mensagens_processadas')
+      .insert([{ message_id: messageId, remote_jid: remoteJid }]);
 
-  if (error && error.code !== '23505') {
-    console.error(`[DB] Erro ao registrar mensagem ${messageId}:`, error.message);
+    if (error && error.code !== '23505') {
+      console.error(`[DB] Falha ao registrar mensagem processada "${messageId}":`, error.message);
+    }
+  } catch (err) {
+    console.error(`[DB] Exceção ao inserir mensagem_processada "${messageId}":`, err);
   }
 }
 
-async function salvarAgendamento(dataEvento: string, horario: string, descricao: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('agenda_obra')
-    .insert([{
-      obra_id: OBRA_ID,
-      data_evento: dataEvento,
-      horario: horario,
-      descricao: descricao,
-    }]);
+/**
+ * Salva um compromisso confirmado na tabela agenda_obra.
+ */
+async function salvarAgendamento(dataEvento: string, horario: string | null, descricao: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('agenda_obra')
+      .insert([
+        {
+          obra_id: OBRA_ID,
+          data_evento: dataEvento,
+          horario: horario || '08:00',
+          descricao: descricao,
+        },
+      ]);
 
-  if (error) {
-    console.error('[DB] Erro ao inserir evento na agenda_obra:', error.message);
+    if (error) {
+      console.error('[DB] Erro ao gravar evento em agenda_obra:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[DB] Exceção ao salvar na agenda_obra:', err);
     return false;
   }
-  return true;
 }
 
+/**
+ * Verifica idempotência dos relatórios (evita múltiplos envios no mesmo dia/janela).
+ */
 async function relatorioJaEnviado(tipo: 'SEMANAL' | 'DIARIO', dataRef: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('disparos_executados')
-    .select('id')
-    .eq('tipo_disparo', tipo)
-    .eq('referencia_data', dataRef)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('disparos_executados')
+      .select('id')
+      .eq('tipo_disparo', tipo)
+      .eq('referencia_data', dataRef)
+      .maybeSingle();
 
-  if (error) {
-    console.error(`[DB] Erro ao checar envio de relatório ${tipo}:`, error.message);
+    if (error) {
+      // Se a tabela ainda não existir, apenas avisa sem quebrar o fluxo
+      console.warn(`[DB] Não foi possível verificar disparos_executados (${tipo}):`, error.message);
+      return false;
+    }
+    return !!data;
+  } catch (err) {
+    console.warn(`[DB] Exceção ao verificar tabela disparos_executados:`, err);
     return false;
   }
-  return !!data;
 }
 
+/**
+ * Marca o envio do relatório para garantir idempotência.
+ */
 async function marcarRelatorioEnviado(tipo: 'SEMANAL' | 'DIARIO', dataRef: string): Promise<void> {
-  const { error } = await supabase
-    .from('disparos_executados')
-    .insert([{ tipo_disparo: tipo, referencia_data: dataRef }]);
+  try {
+    const { error } = await supabase
+      .from('disparos_executados')
+      .insert([{ tipo_disparo: tipo, referencia_data: dataRef }]);
 
-  if (error && error.code !== '23505') {
-    console.error(`[DB] Erro ao registrar envio do relatório ${tipo}:`, error.message);
+    if (error && error.code !== '23505') {
+      console.warn(`[DB] Não foi possível registrar disparo ${tipo}:`, error.message);
+    }
+  } catch (err) {
+    console.warn(`[DB] Exceção ao registrar disparo executado:`, err);
   }
 }
 
 // ==============================================================================
-// Lógica de Relatórios da Obra
+// 2. Motor de Disparos de Relatórios Periódicos
 // ==============================================================================
 
 async function processarRelatorios(client: WASocket): Promise<void> {
   if (!OBRA_GROUP_ID) {
-    console.warn('[Relatórios] OBRA_GROUP_ID não definido. Disparos ignorados.');
+    console.warn('[Relatórios] OBRA_GROUP_ID não configurado. Disparos ignorados.');
     return;
   }
 
   const agora = new Date();
-  const diaSemana = agora.getDay(); // 0 = Dom, 1 = Seg, 2 = Ter, ..., 5 = Sex, 6 = Sáb
+  const diaSemana = agora.getDay(); // 0: Dom, 1: Seg, 2: Ter, 3: Qua, 4: Qui, 5: Sex, 6: Sáb
   const hora = agora.getHours();
   const hojeIso = agora.toISOString().split('T')[0];
 
-  console.log(`[Relatórios] Verificando agendamentos automáticos: Dia=${diaSemana}, Hora=${hora}h`);
+  console.log(`[Relatórios] Analisando regras de envio: Dia=${diaSemana}, Hora=${hora}h, Data=${hojeIso}`);
 
-  // 1. Segunda-feira pela manhã (entre 07:00 e 11:59): Relatório Semanal
+  // Regra 1: Segunda-feira pela manhã (entre 07:00 e 11:59) - Agenda da Semana
   if (diaSemana === 1 && hora >= 7 && hora <= 11) {
     const jaEnviado = await relatorioJaEnviado('SEMANAL', hojeIso);
     if (!jaEnviado) {
-      console.log('📊 [Relatório Semanal] Compilando agenda da semana...');
+      console.log('📋 [Relatório Semanal] Compilando eventos dos próximos 5 dias...');
       const em5Dias = new Date();
       em5Dias.setDate(agora.getDate() + 5);
       const dataFimIso = em5Dias.toISOString().split('T')[0];
@@ -139,18 +181,18 @@ async function processarRelatorios(client: WASocket): Promise<void> {
 
         await client.sendMessage(OBRA_GROUP_ID, { text: mensagem });
         await marcarRelatorioEnviado('SEMANAL', hojeIso);
-        console.log('✅ Relatório Semanal disparado e registrado no Supabase!');
+        console.log('✅ [Relatórios] Agenda da semana enviada e registrada com sucesso!');
       }
     } else {
-      console.log('[Relatório Semanal] Já disparado anteriormente hoje.');
+      console.log('[Relatórios] Agenda da semana já enviada anteriormente hoje.');
     }
   }
 
-  // 2. Terça a Sexta pela manhã (entre 06:00 e 09:59): Relatório Diário
+  // Regra 2: Terça a Sexta pela manhã (entre 06:00 e 09:59) - Lembretes do Dia
   if (diaSemana >= 2 && diaSemana <= 5 && hora >= 6 && hora <= 9) {
     const jaEnviado = await relatorioJaEnviado('DIARIO', hojeIso);
     if (!jaEnviado) {
-      console.log('🌅 [Relatório Diário] Compilando compromissos do dia...');
+      console.log('🌅 [Relatório Diário] Compilando compromissos agendados para hoje...');
       const { data: eventos, error } = await supabase
         .from('agenda_obra')
         .select('*')
@@ -171,37 +213,38 @@ async function processarRelatorios(client: WASocket): Promise<void> {
 
         await client.sendMessage(OBRA_GROUP_ID, { text: mensagem });
         await marcarRelatorioEnviado('DIARIO', hojeIso);
-        console.log('✅ Relatório Diário disparado e registrado no Supabase!');
+        console.log('✅ [Relatórios] Lembretes do dia enviados e registrados com sucesso!');
       }
     } else {
-      console.log('[Relatório Diário] Já disparado anteriormente hoje.');
+      console.log('[Relatórios] Lembretes do dia já enviados anteriormente hoje.');
     }
   }
 }
 
 // ==============================================================================
-// Processamento de Mensagens
+// 3. Processamento Individual e Deduplicação de Mensagens
 // ==============================================================================
 
-async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: WASocket) {
+async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: WASocket): Promise<void> {
+  // Ignora mensagens enviadas pelo próprio bot
   if (msg.key.fromMe) return;
 
   const remoteJid = msg.key.remoteJid;
   const messageId = msg.key.id;
   if (!remoteJid || !messageId) return;
 
-  // Filtra apenas mensagens do grupo configurado
+  // Filtra exclusivamente o grupo configurado
   if (OBRA_GROUP_ID && remoteJid !== OBRA_GROUP_ID) {
     return;
   }
 
-  // Deduplicação: verifica se a mensagem já foi lida
+  // Deduplicação: checa se já foi processada no Supabase
   const processada = await jaProcessouMensagem(messageId);
   if (processada) {
     return;
   }
 
-  // Extrai o conteúdo em texto da mensagem
+  // Extrai o texto da mensagem (mensagens diretas, respostas ou mídias com legenda)
   const texto =
     msg.message?.conversation ||
     msg.message?.extendedTextMessage?.text ||
@@ -209,44 +252,69 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
     msg.message?.videoMessage?.caption;
 
   if (!texto || texto.trim().length === 0) {
+    // Marca como lida para não analisar mensagens vazias repetidamente
     await registrarMensagemProcessada(messageId, remoteJid);
     return;
   }
 
-  console.log(`[Mensagem Nova Recebida]: "${texto}"`);
+  console.log(`[WhatsApp] Mensagem recebida no grupo da obra: "${texto}"`);
 
-  // Envia para o processador de IA com a data de hoje como base
+  // Extração via IA (Gemini) com base na data de hoje
   const hojeIso = new Date().toISOString().split('T')[0];
   const resultado = await extrairAgendamento(texto, hojeIso);
 
   if (resultado.is_agendamento && resultado.data_iso && resultado.descricao) {
-    console.log('🎯 [Agendamento Confirmado pela IA]:', resultado);
-    const salvo = await salvarAgendamento(resultado.data_iso, resultado.horario || '08:00', resultado.descricao);
+    console.log('🎯 [AI] Agendamento identificado com sucesso:', resultado);
+    const salvo = await salvarAgendamento(resultado.data_iso, resultado.horario, resultado.descricao);
 
     if (salvo) {
       try {
+        // Reage à mensagem do usuário com emoji de calendário "📅"
         await client.sendMessage(remoteJid, {
           react: { text: '📅', key: msg.key },
         });
-        console.log('✨ Reação de calendário 📅 enviada no WhatsApp!');
+        console.log('✨ [WhatsApp] Reação 📅 enviada para a mensagem original!');
       } catch (err) {
-        console.error('Erro ao enviar reação no WhatsApp:', err);
+        console.error('[WhatsApp] Falha ao reagir à mensagem:', err);
       }
     }
   }
 
-  // Marca como processada para nunca reprocessar
+  // Registra a mensagem na tabela de deduplicação
   await registrarMensagemProcessada(messageId, remoteJid);
 }
 
 // ==============================================================================
-// Motor Principal e Graceful Shutdown
+// 4. Fluxo de Inicialização e Graceful Shutdown
 // ==============================================================================
 
-async function iniciarBotServerless() {
-  console.log('🚀 [GADAP Hub Bot] Inicializando runner efêmero...');
+async function realizarGracefulShutdown(motivo: string) {
+  if (shutdownTriggered) return;
+  shutdownTriggered = true;
 
-  const { state, saveCreds } = await useSupabaseAuthState();
+  console.log(`\n⏳ [Shutdown] Iniciando encerramento gracioso (${motivo})...`);
+  try {
+    if (saveCredsFn) {
+      await saveCredsFn();
+      console.log('[DB] Credenciais do Baileys consolidadas no Supabase.');
+    }
+    if (sock) {
+      sock.end(undefined);
+      console.log('[WhatsApp] Conexão do socket finalizada.');
+    }
+  } catch (err) {
+    console.error('[Shutdown] Erro ao consolidar sessão durante shutdown:', err);
+  } finally {
+    console.log('👋 [GADAP Hub] Ciclo efêmero concluído. Encerrando processo...');
+    process.exit(0);
+  }
+}
+
+async function main() {
+  console.log('🚀 [GADAP Hub Bot] Inicializando runner serverless efêmero...');
+
+  // 1. Inicializa com o adaptador useSupabaseAuthState
+  const { state, saveCreds } = await useSupabaseAuthState('obra_principal');
   saveCredsFn = saveCreds;
 
   sock = makeWASocket({
@@ -256,14 +324,18 @@ async function iniciarBotServerless() {
     syncFullHistory: false,
   });
 
+  // Atualização contínua de credenciais
   sock.ev.on('creds.update', async () => {
-    if (saveCredsFn) await saveCredsFn();
+    if (saveCredsFn) {
+      await saveCredsFn();
+    }
   });
 
+  // Evento de conexão
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    // Se a sessão ainda não existir no banco (primeira execução local)
+    // Se a sessão não existir (primeira inicialização local), exibe o QR Code
     if (qr) {
       console.log('\n======================================================');
       console.log('⚡ SESSÃO NÃO ENCONTRADA. ESCANEIE O QR CODE ABAIXO:');
@@ -272,7 +344,7 @@ async function iniciarBotServerless() {
     }
 
     if (connection === 'open') {
-      console.log('✅ [WhatsApp] Conexão autenticada e aberta com sucesso!');
+      console.log('✅ [WhatsApp] Conectado e autenticado com sucesso!');
       if (sock) {
         await processarRelatorios(sock);
       }
@@ -280,11 +352,15 @@ async function iniciarBotServerless() {
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      console.warn(`[WhatsApp] Conexão fechada com statusCode: ${statusCode}`);
+      console.warn(`[WhatsApp] Conexão encerrada. Código de status: ${statusCode}`);
+      // Se for logout explícito do dispositivo
+      if (statusCode === DisconnectReason.loggedOut) {
+        console.error('[WhatsApp] Dispositivo desconectado (loggedOut). Novo QR Code necessário.');
+      }
     }
   });
 
-  // Mensagens recebidas ou não lidas durante a sincronização
+  // Mensagens recebidas em tempo real ou pendentes na fila
   sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const msg of messages) {
       if (sock) {
@@ -293,9 +369,9 @@ async function iniciarBotServerless() {
     }
   });
 
-  // Histórico de sincronização
+  // Mensagens sincronizadas pelo histórico do WhatsApp
   sock.ev.on('messaging-history.set', async ({ messages }) => {
-    console.log(`[Histórico] Sincronizando ${messages.length} mensagens...`);
+    console.log(`[WhatsApp] Histórico de mensagens recebido (${messages.length} mensagens). Sincronizando...`);
     for (const msg of messages) {
       if (sock) {
         await processarMensagemIndividual(msg, sock);
@@ -303,28 +379,17 @@ async function iniciarBotServerless() {
     }
   });
 
-  // Timeout preventivo de 60 segundos para Graceful Shutdown
-  setTimeout(async () => {
-    console.log(`\n⏱️ [Timeout ${EXECUTION_TIMEOUT_MS / 1000}s] Iniciando Graceful Shutdown...`);
-    try {
-      if (saveCredsFn) {
-        await saveCredsFn();
-        console.log('💾 Estado de autenticação consolidado no Supabase.');
-      }
-      if (sock) {
-        sock.end(undefined);
-        console.log('🔌 Socket Baileys desconectado.');
-      }
-    } catch (err) {
-      console.error('Erro durante o shutdown:', err);
-    } finally {
-      console.log('🏁 Ciclo finalizado com sucesso. Encerrando processo...');
-      process.exit(0);
-    }
+  // Timeout fixo de 60 segundos para desligamento controlado
+  setTimeout(() => {
+    realizarGracefulShutdown(`Timeout de ${EXECUTION_TIMEOUT_MS / 1000}s atingido`);
   }, EXECUTION_TIMEOUT_MS);
 }
 
-iniciarBotServerless().catch((err) => {
-  console.error('FATAL: Erro não tratado no runner serverless:', err);
+// Captura de sinais do sistema operacional
+process.on('SIGINT', () => realizarGracefulShutdown('SIGINT recebido'));
+process.on('SIGTERM', () => realizarGracefulShutdown('SIGTERM recebido'));
+
+main().catch((err) => {
+  console.error('[FATAL] Erro não tratado na execução:', err);
   process.exit(1);
 });
