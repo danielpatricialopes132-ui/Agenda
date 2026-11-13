@@ -9,7 +9,7 @@ import pino from 'pino';
 import dotenv from 'dotenv';
 
 import { useSupabaseAuthState, supabase } from './lib/useSupabaseAuthState';
-import { processarMensagemComIA } from './lib/aiProcessor';
+import { extrairAgendamento } from './lib/aiProcessor';
 
 dotenv.config();
 
@@ -215,12 +215,13 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
 
   console.log(`[Mensagem Nova Recebida]: "${texto}"`);
 
-  // Envia para o processador de IA
-  const resultado = await processarMensagemComIA(texto);
+  // Envia para o processador de IA com a data de hoje como base
+  const hojeIso = new Date().toISOString().split('T')[0];
+  const resultado = await extrairAgendamento(texto, hojeIso);
 
-  if (resultado.is_agendamento) {
+  if (resultado.is_agendamento && resultado.data_iso && resultado.descricao) {
     console.log('🎯 [Agendamento Confirmado pela IA]:', resultado);
-    const salvo = await salvarAgendamento(resultado.data_iso, resultado.horario, resultado.descricao);
+    const salvo = await salvarAgendamento(resultado.data_iso, resultado.horario || '08:00', resultado.descricao);
 
     if (salvo) {
       try {

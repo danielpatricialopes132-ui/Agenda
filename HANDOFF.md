@@ -5,37 +5,42 @@ Documento vivo de sincronização entre o desenvolvedor humano e os agentes de I
 ---
 
 ## [State]
-`02 - Implementação do Adaptador useSupabaseAuthState Concluída`
+`03 - Processador de IA (aiProcessor.ts) Concluído`
 
 ---
 
 ## [Context]
-O projeto está configurado para execução serverless no GitHub Actions com banco de dados e sessão persistidos no Supabase. O adaptador customizado do Baileys foi implementado com cache em memória e suporte à serialização binária com BufferJSON.
+O projeto está configurado para execução serverless no GitHub Actions. O adaptador de autenticação remota (`useSupabaseAuthState.ts`) e o processador NLP com Google Gemini (`aiProcessor.ts`) foram implementados com validação de tipos estrita e tratamento de erros.
 
 ---
 
 ## [Completed]
-- [x] Geração da estrutura de pastas do projeto (`src/lib/`, `src/config/`, `.github/workflows/`).
-- [x] Configuração do `package.json` com scripts de `build`, `start`, `dev` e dependências necessárias.
-- [x] Criação do arquivo de governança global [`AGENTS.md`](file:///c:/Agenda/AGENTS.md).
-- [x] Criação do diário de bordo [`HANDOFF.md`](file:///c:/Agenda/HANDOFF.md).
-- [x] Criação das tabelas no Supabase (`baileys_auth_state` [colunas: `id` e `data`], `mensagens_processadas`, `agenda_obra`).
-- [x] Implementação do adaptador `src/lib/useSupabaseAuthState.ts` com:
-  - Assinatura `useSupabaseAuthState(sessionName: string)`.
-  - Funções internas `readData`, `writeData` e `removeData`.
-  - Reconstrução de buffers binários com `BufferJSON.reviver` e fallback para `initAuthCreds()`.
-  - Serialização com `BufferJSON.replacer` e UPSERT na tabela `baileys_auth_state`.
-  - Cache local em memória (`Map`) para mitigar throttling de I/O no Supabase.
+- [x] **Passo 1**: Setup inicial, criação de `package.json`, `tsconfig.json`, `AGENTS.md` e `HANDOFF.md`.
+- [x] **Passo 2**: Implementação do adaptador `src/lib/useSupabaseAuthState.ts` com suporte a `BufferJSON`, cache em memória (`Map`) e persistência no Supabase.
+- [x] **Passo 3**: Implementação do processador de IA em `src/lib/aiProcessor.ts`:
+  - Utilização do SDK oficial `@google/generative-ai` com `gemini-1.5-flash`.
+  - Exportação da função `extrairAgendamento(textoMensagem: string, dataAtualBase: string)`.
+  - Suporte à resolução temporal dinâmica a partir de `dataAtualBase` (ex: "amanhã", "segunda que vem").
+  - System prompt rigoroso focado no canteiro de obras do ecossistema GADAP Hub.
+  - Interface garantida `{ is_agendamento: boolean, data_iso: string | null, horario: string | null, descricao: string | null }`.
+  - Tratamento de exceções com fallback seguro retornando `is_agendamento: false`.
 
 ---
 
 ## [Pending / Next Steps]
-1. [ ] Implementar a integração com a IA em `src/lib/aiProcessor.ts` com tipagem garantida e prompt estruturado para o contexto de obras.
-2. [ ] Consolidar o motor principal em `src/index.ts` (conexão, filtro por `OBRA_GROUP_ID`, deduplicação e rotina de relatórios).
-3. [ ] Criar/validar o workflow do GitHub Actions em `.github/workflows/bot-cron.yml`.
-4. [ ] Criar a tabela `disparos_executados` no Supabase para controle de idempotência dos relatórios diários/semanais.
+1. [ ] **Passo 4**: Consolidar o motor principal em `src/index.ts`:
+   - Conexão do Baileys via `useSupabaseAuthState`.
+   - Exibição de QR Code se não autenticado.
+   - Sincronização de mensagens (`messages.upsert` e `messaging-history.set`).
+   - Filtro por `OBRA_GROUP_ID`.
+   - Deduplicação na tabela `mensagens_processadas`.
+   - Inserção na tabela `agenda_obra` e reação `📅`.
+   - Rotina de relatórios (Segunda-feira semanal / Terça a Sexta diário).
+   - Graceful shutdown de 60 segundos com `process.exit(0)`.
+2. [ ] **Passo 5**: Finalizar o workflow do GitHub Actions em `.github/workflows/bot-cron.yml`.
+3. [ ] Criar tabela `disparos_executados` no Supabase (se ainda não executado).
 
 ---
 
 ## [Known Issues / Blockers]
-- Executar a primeira inicialização local (`npm start`) para gerar o QR Code e popular as credenciais iniciais na tabela `baileys_auth_state`.
+- Necessidade de rodar o primeiro login local (`npm start`) para scan do QR Code e persistência inicial das credenciais no Supabase.
