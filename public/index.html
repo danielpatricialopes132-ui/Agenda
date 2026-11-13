@@ -85,6 +85,14 @@
         </svg>
         <span>Consulta de Agenda</span>
       </button>
+
+      <!-- Aba 4: Ajuda / Tutoriais -->
+      <button onclick="navegarPara('ajuda')" id="nav-btn-ajuda" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+        <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Ajuda / Tutoriais</span>
+      </button>
     </nav>
 
     <!-- Footer da Sidebar: Status da Sessão Remota -->
@@ -286,6 +294,147 @@
         </div>
       </section>
 
+      <!-- ========================================================================== -->
+      <!-- ABA 4: AJUDA / TUTORIAIS (DOCUMENTAÇÃO INTEGRADA & FAQ) -->
+      <!-- ========================================================================== -->
+      <section id="view-ajuda" class="max-w-5xl mx-auto space-y-8 hidden pb-12">
+        
+        <!-- Cards de Acesso Rápido (3 Blocos Superiores) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          <!-- Bloco 1: Conectar -->
+          <div class="bg-slate-900 border border-slate-800 hover:border-emerald-500/40 rounded-3xl p-6 shadow-xl transition flex flex-col justify-between">
+            <div>
+              <div class="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                </svg>
+              </div>
+              <h4 class="text-sm font-bold text-white">1. Como Conectar</h4>
+              <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+                Vá até a aba <strong>Conexão WhatsApp</strong>, abra o aplicativo no celular e escaneie o QR Code. A sessão é guardada no banco remoto para sempre.
+              </p>
+            </div>
+            <button onclick="navegarPara('conexao')" class="mt-4 text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
+              Ver QR Code &rarr;
+            </button>
+          </div>
+
+          <!-- Bloco 2: Cadastrar Obras -->
+          <div class="bg-slate-900 border border-slate-800 hover:border-blue-500/40 rounded-3xl p-6 shadow-xl transition flex flex-col justify-between">
+            <div>
+              <div class="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                </svg>
+              </div>
+              <h4 class="text-sm font-bold text-white">2. Cadastrar Obras</h4>
+              <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+                Na aba <strong>Gestão de Obras</strong>, escolha o grupo de WhatsApp, defina o <em>Clean Name</em> da obra e os números de celular dos engenheiros responsáveis.
+              </p>
+            </div>
+            <button onclick="navegarPara('obras')" class="mt-4 text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1">
+              Gerenciar Obras &rarr;
+            </button>
+          </div>
+
+          <!-- Bloco 3: Interagir -->
+          <div class="bg-slate-900 border border-slate-800 hover:border-cyan-500/40 rounded-3xl p-6 shadow-xl transition flex flex-col justify-between">
+            <div>
+              <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center mb-4">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                </svg>
+              </div>
+              <h4 class="text-sm font-bold text-white">3. Falar no WhatsApp</h4>
+              <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+                Converse naturalmente no grupo. Diga frases como <em>"Amanhã chega a persiana"</em> ou <em>"Concretagem dia 25/11 às 14h"</em>. A IA fará o resto!
+              </p>
+            </div>
+            <button onclick="navegarPara('agenda')" class="mt-4 text-xs font-semibold text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+              Ver Agenda &rarr;
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Dicas de IA (Caixa com Fundo Destacado) -->
+        <div class="bg-gradient-to-r from-blue-950/80 via-slate-900 to-indigo-950/80 border border-blue-500/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center flex-shrink-0 text-xl font-bold">
+              ✨
+            </div>
+            <div>
+              <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                Poder da Linguagem Natural (Google Gemini AI)
+              </h4>
+              <p class="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                O bot não exige nenhum tipo de barra, comando ou palavra-chave específica (como <code>/agendar</code> ou <code>!evento</code>). O modelo de inteligência artificial analisa o contexto da conversa, extrai datas relativas (<em>"depois de amanhã"</em>, <em>"próxima terça"</em>), horários comerciais e analisa conflitos logísticos entre fornecedores no mesmo espaço.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ Interativo (Accordions) -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+          <h3 class="text-sm font-bold text-white pb-3 border-b border-slate-800 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-md shadow-amber-400/50"></span>
+            Perguntas Frequentes (FAQ)
+          </h3>
+
+          <div class="space-y-3">
+            
+            <!-- Accordion 1 -->
+            <div class="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/50">
+              <button onclick="toggleFaq('faq-1')" class="w-full text-left px-5 py-4 flex items-center justify-between text-xs font-bold text-white hover:bg-slate-800/40 transition">
+                <span>Por que o bot não está a responder no grupo de WhatsApp?</span>
+                <span id="faq-icon-1" class="text-slate-400 font-mono text-base transition-transform">+</span>
+              </button>
+              <div id="faq-1" class="hidden px-5 pb-4 text-xs text-slate-400 leading-relaxed border-t border-slate-800/40 pt-3">
+                1. Verifique se a conexão WhatsApp está em status verde na aba <strong>Conexão WhatsApp</strong>.<br/>
+                2. Certifique-se de que o grupo foi configurado e aparece na lista de <strong>Obras Monitorizadas</strong>.<br/>
+                3. A mensagem enviada no WhatsApp deve conter uma intenção clara com referência de data ou horário.
+              </div>
+            </div>
+
+            <!-- Accordion 2 -->
+            <div class="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/50">
+              <button onclick="toggleFaq('faq-2')" class="w-full text-left px-5 py-4 flex items-center justify-between text-xs font-bold text-white hover:bg-slate-800/40 transition">
+                <span>O que significa o aviso de Trava de Segurança (Mutex)?</span>
+                <span id="faq-icon-2" class="text-slate-400 font-mono text-base transition-transform">+</span>
+              </button>
+              <div id="faq-2" class="hidden px-5 pb-4 text-xs text-slate-400 leading-relaxed border-t border-slate-800/40 pt-3">
+                O WhatsApp bloqueia o login quando duas máquinas usam a mesma sessão simultaneamente (erro 440 Connection Replaced). O GADAP Hub utiliza um Lock Distribuído inteligente no banco de dados para garantir que o servidor de nuvem mantenha o bot conectado, enquanto outros computadores abrem o Dashboard em modo de leitura seguro.
+              </div>
+            </div>
+
+            <!-- Accordion 3 -->
+            <div class="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/50">
+              <button onclick="toggleFaq('faq-3')" class="w-full text-left px-5 py-4 flex items-center justify-between text-xs font-bold text-white hover:bg-slate-800/40 transition">
+                <span>Como e quando os responsáveis recebem os relatórios de manhã?</span>
+                <span id="faq-icon-3" class="text-slate-400 font-mono text-base transition-transform">+</span>
+              </button>
+              <div id="faq-3" class="hidden px-5 pb-4 text-xs text-slate-400 leading-relaxed border-t border-slate-800/40 pt-3">
+                Todas as manhãs entre 06:30 e 08:30, o bot gera um <strong>Infográfico em Imagem</strong> com a timeline de entregas e um <strong>Morning Briefing em Áudio</strong> falado pela IA. O material é disparado automaticamente tanto no grupo quanto no número privado de cada responsável cadastrado no sistema.
+              </div>
+            </div>
+
+            <!-- Accordion 4 -->
+            <div class="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/50">
+              <button onclick="toggleFaq('faq-4')" class="w-full text-left px-5 py-4 flex items-center justify-between text-xs font-bold text-white hover:bg-slate-800/40 transition">
+                <span>O que é o "Nome de Disparo (Clean Name)"?</span>
+                <span id="faq-icon-4" class="text-slate-400 font-mono text-base transition-transform">+</span>
+              </button>
+              <div id="faq-4" class="hidden px-5 pb-4 text-xs text-slate-400 leading-relaxed border-t border-slate-800/40 pt-3">
+                Muitos grupos no WhatsApp usam títulos longos com emojis ou números de contrato. O Clean Name é o nome formal que você dá à obra (exemplo: <em>"Obra Leopoldo"</em>). É esse nome limpo que o bot usa nas imagens e pronuncia na mensagem de voz de bom dia.
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
     </div>
   </div>
 
@@ -354,9 +503,21 @@
       color: '#f8fafc',
     });
 
+    function toggleFaq(id) {
+      const el = document.getElementById(id);
+      const icon = document.getElementById('faq-icon-' + id.replace('faq-', ''));
+      if (el.classList.contains('hidden')) {
+        el.classList.remove('hidden');
+        if (icon) icon.innerText = '−';
+      } else {
+        el.classList.add('hidden');
+        if (icon) icon.innerText = '+';
+      }
+    }
+
     function navegarPara(aba) {
       abaAtual = aba;
-      const abas = ['conexao', 'obras', 'agenda'];
+      const abas = ['conexao', 'obras', 'agenda', 'ajuda'];
 
       abas.forEach(nome => {
         const btn = document.getElementById('nav-btn-' + nome);
@@ -388,6 +549,9 @@
         if (calendarInstance) {
           setTimeout(() => calendarInstance.render(), 100);
         }
+      } else if (aba === 'ajuda') {
+        topTitle.innerText = 'Ajuda & Tutoriais';
+        topSubtitle.innerText = 'Guia de operação e boas práticas da Inteligência Artificial';
       }
     }
 
@@ -752,6 +916,17 @@
 
           cacheGrupos = Array.isArray(data.gruposLista) ? data.gruposLista : [];
           renderizarGrupos();
+        } else if (data.status === 'modo_leitura') {
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-cyan-400';
+          text.innerText = 'Dashboard (Modo Leitura)';
+          badgeOnline.classList.remove('hidden');
+          badgeOnline.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center space-x-1.5';
+          badgeOnline.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span><span>Trava Ativa (Nuvem Conectada)</span>';
+
+          qrContainer.classList.add('hidden');
+          qrConectadoMsg.classList.remove('hidden');
+          qrTitle.innerText = 'Modo Leitura Distribuído';
+          qrDesc.innerText = 'O bot do WhatsApp está operando na nuvem. Este painel opera em modo de gestão sem causar conflito 440.';
         }
       } catch (err) {
         console.error('Erro em pollStatus:', err);
