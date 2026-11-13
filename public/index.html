@@ -78,12 +78,12 @@
         <span>Gestão de Obras</span>
       </button>
 
-      <!-- Aba 3: Calendário da Obra -->
-      <button onclick="navegarPara('calendario')" id="nav-btn-calendario" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+      <!-- Aba 3: Consulta de Agendamentos (Tabela + Calendário) -->
+      <button onclick="navegarPara('agenda')" id="nav-btn-agenda" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
         <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
         </svg>
-        <span>Calendário da Obra</span>
+        <span>Consulta de Agenda</span>
       </button>
     </nav>
 
@@ -208,28 +208,81 @@
       </section>
 
       <!-- ========================================================================== -->
-      <!-- ABA 3: VISÃO DE CALENDÁRIO (FULLCALENDAR INTEGRADO) -->
+      <!-- ABA 3: CONSULTA DE AGENDAMENTOS (CALENDÁRIO + TABELA INTEGRADOS) -->
       <!-- ========================================================================== -->
-      <section id="view-calendario" class="flex flex-col h-[750px] bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl hidden">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+      <section id="view-agenda" class="flex flex-col h-[750px] bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl hidden">
+        
+        <!-- Header da Tela de Consulta -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between pb-5 border-b border-slate-800 gap-4">
           <div>
             <h3 class="text-sm font-bold text-white flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-md shadow-cyan-400/50"></span>
-              Calendário Operacional de Obras
+              Consulta de Agendamentos & Cronograma
             </h3>
-            <p class="text-xs text-slate-400 mt-0.5">Navegue pelas entregas e vistorias agendadas pela IA</p>
+            <p class="text-xs text-slate-400 mt-0.5">Acompanhe as entregas, concretagens e vistorias agendadas pela IA</p>
           </div>
 
-          <div class="flex items-center space-x-3">
-            <label class="text-xs text-slate-400 font-medium">Filtrar Obra:</label>
-            <select id="select-obra-calendario" onchange="carregarEventosFullCalendar()" class="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500 font-semibold cursor-pointer">
-              <option value="">Selecione uma obra...</option>
-            </select>
+          <!-- Controles: Dropdown de Obras + Toggle Modo de Visão -->
+          <div class="flex flex-wrap items-center gap-4">
+            
+            <!-- Dropdown Largo de Obras -->
+            <div class="flex items-center space-x-2">
+              <label class="text-xs text-slate-400 font-medium">Obra:</label>
+              <select id="select-obra-agenda" onchange="carregarAgendamentosObra()" class="bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 font-semibold cursor-pointer w-64">
+                <option value="">Selecione uma obra...</option>
+              </select>
+            </div>
+
+            <!-- Toggle Switch (Modo Calendário vs Modo Lista) -->
+            <div class="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1">
+              <button onclick="alternarModoVisao('calendario')" id="btn-visao-cal" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition bg-cyan-600 text-white shadow-sm flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <span>Calendário</span>
+              </button>
+              <button onclick="alternarModoVisao('tabela')" id="btn-visao-tab" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                </svg>
+                <span>Lista / Tabela</span>
+              </button>
+            </div>
+
           </div>
         </div>
 
-        <div class="mt-5 flex-1 p-3 bg-slate-950/60 rounded-2xl border border-slate-800/80 overflow-hidden flex flex-col">
-          <div id="calendar" class="flex-1"></div>
+        <!-- Área Central de Exibição das Visões -->
+        <div class="mt-5 flex-1 p-4 bg-slate-950/60 rounded-2xl border border-slate-800/80 overflow-hidden flex flex-col">
+          
+          <!-- Visão 1: Calendário (FullCalendar) -->
+          <div id="container-calendario" class="flex-1 flex flex-col">
+            <div id="calendar" class="flex-1"></div>
+          </div>
+
+          <!-- Visão 2: Tabela / Lista Ordenada de Eventos -->
+          <div id="container-tabela" class="flex-1 overflow-y-auto custom-scroll hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr class="border-b border-slate-800 text-slate-400 text-[11px] uppercase font-bold tracking-wider">
+                    <th class="py-3 px-4">Data</th>
+                    <th class="py-3 px-4">Horário</th>
+                    <th class="py-3 px-4">Descrição do Compromisso</th>
+                    <th class="py-3 px-4 text-right">Identificador</th>
+                  </tr>
+                </thead>
+                <tbody id="tabela-agenda-body" class="divide-y divide-slate-800/60 text-slate-300">
+                  <tr>
+                    <td colspan="4" class="py-16 text-center text-slate-500">
+                      Selecione uma obra no dropdown acima para visualizar os agendamentos.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -237,12 +290,12 @@
   </div>
 
   <!-- ============================================================================== -->
-  <!-- MODAL DE CONFIGURAÇÃO DE OBRA (TAILWIND BACKDROP-BLUR) -->
+  <!-- MODAL DE CONFIGURAÇÃO / EDIÇÃO DE OBRA (CLEAN NAME & RESPONSÁVEIS) -->
   <!-- ============================================================================== -->
   <div id="modal-obra" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md hidden p-4">
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-2xl">
       <div class="flex items-center justify-between pb-4 border-b border-slate-800">
-        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+        <h3 id="modal-titulo" class="text-sm font-bold text-white flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-blue-500"></span>
           Configurar Monitoramento da Obra
         </h3>
@@ -250,37 +303,44 @@
       </div>
 
       <form id="form-obra" onsubmit="salvarObra(event)" class="mt-5 space-y-4">
+        <input type="hidden" id="modal-modo" value="criar" />
+
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Nome da Obra</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">
+            Nome de Disparo (Clean Name)
+            <span class="text-slate-500 font-normal ml-1">- Utilizado nos relatórios e áudios</span>
+          </label>
           <input type="text" id="modal-nome" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 font-sans" placeholder="Ex: Obra Leopoldo" />
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">ID do Grupo WhatsApp (JID)</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">ID do Grupo WhatsApp (JID)</label>
           <input type="text" id="modal-id" readonly class="w-full bg-slate-950/80 border border-slate-800/80 rounded-xl px-3.5 py-2.5 text-xs font-mono text-emerald-400 select-all cursor-not-allowed" />
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1">Telefones dos Responsáveis (Separados por vírgula)</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Telefones dos Responsáveis (Separados por vírgula)</label>
           <textarea id="modal-responsaveis" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 font-mono" placeholder="5511988139833, 5511978543369"></textarea>
-          <p class="text-[11px] text-slate-500 mt-1">Os números cadastrados recebem o Infográfico em Imagem e o Briefing em Áudio matinal no privado.</p>
+          <p class="text-[11px] text-slate-500 mt-1">Os números cadastrados recebem o Infográfico em Imagem e o Morning Briefing em Áudio matinal no privado.</p>
         </div>
 
         <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
           <button type="button" onclick="fecharModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition">Cancelar</button>
-          <button type="submit" id="btn-salvar" class="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition">Salvar Obra</button>
+          <button type="submit" id="btn-salvar" class="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition">Salvar Alterações</button>
         </div>
       </form>
     </div>
   </div>
 
   <!-- ============================================================================== -->
-  <!-- JAVASCRIPT VANILLA ROBUSTO & INTERATIVO -->
+  <!-- JAVASCRIPT VANILLA CORPORATIVO & INTERATIVO -->
   <!-- ============================================================================== -->
   <script>
     let abaAtual = 'obras';
+    let modoVisaoAtual = 'calendario'; // 'calendario' ou 'tabela'
     let cacheGrupos = [];
     let cacheObras = [];
+    let cacheEventos = [];
     let calendarInstance = null;
 
     // Toast de Feedback
@@ -296,7 +356,7 @@
 
     function navegarPara(aba) {
       abaAtual = aba;
-      const abas = ['conexao', 'obras', 'calendario'];
+      const abas = ['conexao', 'obras', 'agenda'];
 
       abas.forEach(nome => {
         const btn = document.getElementById('nav-btn-' + nome);
@@ -321,16 +381,48 @@
       } else if (aba === 'obras') {
         topTitle.innerText = 'Gestão de Obras';
         topSubtitle.innerText = 'Vincule os grupos de WhatsApp aos engenheiros e mestres';
-      } else if (aba === 'calendario') {
-        topTitle.innerText = 'Calendário Operacional';
-        topSubtitle.innerText = 'Visão de cronograma e entregas sincronizadas';
+      } else if (aba === 'agenda') {
+        topTitle.innerText = 'Consulta de Agendamentos';
+        topSubtitle.innerText = 'Acompanhe as entregas e vistorias em calendário ou tabela';
         inicializarCalendario();
+        if (calendarInstance) {
+          setTimeout(() => calendarInstance.render(), 100);
+        }
       }
     }
 
-    function abrirModal(id, nome) {
+    function alternarModoVisao(modo) {
+      modoVisaoAtual = modo;
+      const btnCal = document.getElementById('btn-visao-cal');
+      const btnTab = document.getElementById('btn-visao-tab');
+      const contCal = document.getElementById('container-calendario');
+      const contTab = document.getElementById('container-tabela');
+
+      if (modo === 'calendario') {
+        btnCal.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition bg-cyan-600 text-white shadow-sm flex items-center gap-1.5';
+        btnTab.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white flex items-center gap-1.5';
+        contCal.classList.remove('hidden');
+        contTab.classList.add('hidden');
+        if (calendarInstance) {
+          setTimeout(() => calendarInstance.render(), 50);
+        }
+      } else {
+        btnTab.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition bg-cyan-600 text-white shadow-sm flex items-center gap-1.5';
+        btnCal.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white flex items-center gap-1.5';
+        contTab.classList.remove('hidden');
+        contCal.classList.add('hidden');
+      }
+    }
+
+    function abrirModal(id, nome, modo = 'criar') {
       document.getElementById('modal-id').value = id;
       document.getElementById('modal-nome').value = nome || '';
+      document.getElementById('modal-modo').value = modo;
+
+      const tituloEl = document.getElementById('modal-titulo');
+      tituloEl.innerHTML = modo === 'editar'
+        ? '<span class="w-2 h-2 rounded-full bg-amber-400"></span> Editar Obra & Nome de Disparo'
+        : '<span class="w-2 h-2 rounded-full bg-blue-500"></span> Configurar Monitoramento da Obra';
 
       const obra = cacheObras.find(o => o.obra_id === id);
       document.getElementById('modal-responsaveis').value = (obra && Array.isArray(obra.responsaveis))
@@ -354,10 +446,14 @@
       const nome_obra = document.getElementById('modal-nome').value;
       const responsaveisRaw = document.getElementById('modal-responsaveis').value;
       const responsaveis = responsaveisRaw.split(',').map(s => s.trim()).filter(Boolean);
+      const modo = document.getElementById('modal-modo').value;
 
       try {
-        const res = await fetch('/api/obras', {
-          method: 'POST',
+        const url = modo === 'editar' ? ('/api/obras/' + encodeURIComponent(obra_id)) : '/api/obras';
+        const method = modo === 'editar' ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+          method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ obra_id, nome_obra, responsaveis, ativa: true }),
         });
@@ -365,7 +461,7 @@
         const json = await res.json();
         if (res.ok && json.sucesso) {
           fecharModal();
-          Toast.fire({ icon: 'success', title: 'Obra configurada com sucesso!' });
+          Toast.fire({ icon: 'success', title: modo === 'editar' ? 'Obra atualizada com sucesso!' : 'Obra cadastrada com sucesso!' });
           await carregarObras();
           renderizarGrupos();
         } else {
@@ -380,7 +476,7 @@
       } catch (err) {
         Toast.fire({ icon: 'error', title: 'Erro de conexão com o servidor.' });
       } finally {
-        btn.innerText = 'Salvar Obra';
+        btn.innerText = 'Salvar Alterações';
         btn.disabled = false;
       }
     }
@@ -420,7 +516,7 @@
       countEl.innerText = grupos.length + ' grupos';
 
       if (grupos.length === 0) {
-        container.innerHTML = '<div class="py-20 text-center text-slate-500 text-xs">Nenhum grupo encontrado nesta conta do WhatsApp.</div>';
+        container.innerHTML = '<div class="py-20 text-center text-slate-500 text-xs">Nenhum grupo identificado nesta conta do WhatsApp.</div>';
         return;
       }
 
@@ -429,65 +525,77 @@
         const jaMonitorada = !!obra;
         const nomeExibicao = jaMonitorada ? obra.nome_obra : g.subject;
 
-        return \`
-          <div class="bg-slate-950/70 border \${jaMonitorada ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'} rounded-2xl p-4 flex items-center justify-between gap-3 hover:border-slate-700 transition">
+        return `
+          <div class="bg-slate-950/70 border ${jaMonitorada ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'} rounded-2xl p-4 flex items-center justify-between gap-3 hover:border-slate-700 transition">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <h4 class="font-bold text-white text-xs truncate">\${nomeExibicao}</h4>
-                \${jaMonitorada ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] rounded-full font-bold uppercase tracking-wider">Monitorada</span>' : ''}
+                <h4 class="font-bold text-white text-xs truncate">${nomeExibicao}</h4>
+                ${jaMonitorada ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] rounded-full font-bold uppercase tracking-wider">Monitorada</span>' : ''}
               </div>
-              <p class="text-[11px] font-mono text-slate-500 truncate mt-1">\${g.id}</p>
+              <p class="text-[11px] font-mono text-slate-500 truncate mt-1">${g.id}</p>
             </div>
-            <button onclick="abrirModal('\${g.id}', '\${nomeExibicao.replace(/'/g, "\\\\'")}')" class="px-3.5 py-2 rounded-xl \${jaMonitorada ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'} font-semibold text-xs whitespace-nowrap transition flex items-center gap-1.5">
-              <span>\${jaMonitorada ? '✏️ Editar' : '➕ Configurar Obra'}</span>
+            <button onclick="abrirModal('${g.id}', '${nomeExibicao.replace(/'/g, "\\'")}', '${jaMonitorada ? 'editar' : 'criar'}')" class="px-3.5 py-2 rounded-xl ${jaMonitorada ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'} font-semibold text-xs whitespace-nowrap transition flex items-center gap-1.5">
+              <span>${jaMonitorada ? '✏️ Editar' : '➕ Configurar Obra'}</span>
             </button>
           </div>
-        \`;
+        `;
       }).join('');
     }
 
     function renderizarObras() {
       const container = document.getElementById('obras-lista');
       const countEl = document.getElementById('obras-count');
-      const selectCalendario = document.getElementById('select-obra-calendario');
+      const selectAgenda = document.getElementById('select-obra-agenda');
       const obras = Array.isArray(cacheObras) ? cacheObras : [];
       countEl.innerText = obras.length + ' monitoradas';
 
-      // Atualiza o select do FullCalendar
-      selectCalendario.innerHTML = '<option value="">Selecione uma obra...</option>' + obras.map(o => \`<option value="\${o.obra_id}">\${o.nome_obra}</option>\`).join('');
+      // Atualiza o select da Tela de Consulta de Agenda
+      const obraSelecionadaAnterior = selectAgenda.value;
+      selectAgenda.innerHTML = '<option value="">Selecione uma obra...</option>' + obras.map(o => `<option value="${o.obra_id}">${o.nome_obra}</option>`).join('');
+      if (obraSelecionadaAnterior && obras.some(o => o.obra_id === obraSelecionadaAnterior)) {
+        selectAgenda.value = obraSelecionadaAnterior;
+      }
 
       if (obras.length === 0) {
-        container.innerHTML = \`
+        container.innerHTML = `
           <div class="py-20 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl p-6">
             Nenhuma obra configurada ainda.<br/>Selecione um grupo no painel esquerdo e clique em "➕ Configurar Obra".
           </div>
-        \`;
+        `;
         return;
       }
 
-      container.innerHTML = obras.map(o => \`
+      container.innerHTML = obras.map(o => `
         <div class="bg-slate-950/80 border border-slate-800 hover:border-blue-500/40 rounded-2xl p-4 transition-all flex flex-col gap-3">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
-              <h4 class="font-bold text-white text-xs truncate">\${o.nome_obra}</h4>
-              <p class="text-[11px] font-mono text-emerald-400 truncate mt-0.5 select-all">\${o.obra_id}</p>
+              <div class="flex items-center gap-2">
+                <h4 class="font-bold text-white text-xs truncate">${o.nome_obra}</h4>
+                <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-semibold border border-blue-500/20">Clean Name</span>
+              </div>
+              <p class="text-[11px] font-mono text-emerald-400 truncate mt-0.5 select-all">${o.obra_id}</p>
             </div>
-            <button onclick="removerObra('\${o.obra_id}', '\${o.nome_obra.replace(/'/g, "\\\\'")}')" class="text-xs px-2.5 py-1 text-rose-400 hover:bg-rose-500/10 rounded-lg border border-rose-500/20 transition whitespace-nowrap">
-              Remover
-            </button>
+            <div class="flex items-center gap-1.5">
+              <button onclick="abrirModal('${o.obra_id}', '${o.nome_obra.replace(/'/g, "\\'")}', 'editar')" class="text-xs px-2.5 py-1 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition whitespace-nowrap flex items-center gap-1">
+                <span>✏️ Editar</span>
+              </button>
+              <button onclick="removerObra('${o.obra_id}', '${o.nome_obra.replace(/'/g, "\\'")}')" class="text-xs px-2.5 py-1 text-rose-400 hover:bg-rose-500/10 rounded-lg border border-rose-500/20 transition whitespace-nowrap">
+                Remover
+              </button>
+            </div>
           </div>
 
           <div class="text-xs text-slate-400 flex flex-col gap-1.5 pt-2 border-t border-slate-800/60">
             <span class="text-[11px] text-slate-500 font-medium">Responsáveis que recebem os relatórios:</span>
             <div class="flex flex-wrap gap-1.5">
-              \${o.responsaveis && o.responsaveis.length > 0 
-                ? o.responsaveis.map(r => \`<span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-300">📱 \${r}</span>\`).join('')
+              ${o.responsaveis && o.responsaveis.length > 0 
+                ? o.responsaveis.map(r => `<span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-300">📱 ${r}</span>`).join('')
                 : '<span class="text-slate-600 text-[11px]">Disparo apenas no grupo principal</span>'
               }
             </div>
           </div>
         </div>
-      \`).join('');
+      `).join('');
     }
 
     async function carregarObras() {
@@ -526,28 +634,73 @@
           },
         });
         calendarInstance.render();
-      } else {
-        calendarInstance.render();
       }
     }
 
-    async function carregarEventosFullCalendar() {
-      const obraId = document.getElementById('select-obra-calendario').value;
-      if (!calendarInstance) return;
+    function renderizarTabelaAgenda(eventos) {
+      const tbody = document.getElementById('tabela-agenda-body');
+      if (!eventos || eventos.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" class="py-16 text-center text-slate-500 text-xs">
+              Nenhum agendamento registrado para esta obra.
+            </td>
+          </tr>
+        `;
+        return;
+      }
 
+      tbody.innerHTML = eventos.map(ev => {
+        const [ano, mes, dia] = (ev.data_evento || '').split('-');
+        const dataFmt = (ano && mes && dia) ? `${dia}/${mes}/${ano}` : ev.data_evento;
+
+        return `
+          <tr class="hover:bg-slate-900/60 transition">
+            <td class="py-3 px-4 font-semibold text-white whitespace-nowrap">
+              <span class="inline-flex items-center gap-1.5">
+                📅 ${dataFmt}
+              </span>
+            </td>
+            <td class="py-3 px-4 font-mono text-cyan-400 whitespace-nowrap">
+              ⏰ ${ev.horario || 'Comercial'}
+            </td>
+            <td class="py-3 px-4 text-slate-200">
+              ${ev.descricao || 'Sem descrição'}
+            </td>
+            <td class="py-3 px-4 text-right font-mono text-[10px] text-slate-500 select-all">
+              #${String(ev.id).slice(0, 8)}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function carregarAgendamentosObra() {
+      const obraId = document.getElementById('select-obra-agenda').value;
       if (!obraId) {
-        calendarInstance.removeAllEvents();
+        if (calendarInstance) calendarInstance.removeAllEvents();
+        renderizarTabelaAgenda([]);
         return;
       }
 
       try {
         const res = await fetch('/api/agenda/' + encodeURIComponent(obraId));
         const eventos = await res.json();
-        calendarInstance.removeAllEvents();
-        calendarInstance.addEventSource(eventos);
-        Toast.fire({ icon: 'info', title: eventos.length + ' eventos carregados no calendário.' });
+        cacheEventos = Array.isArray(eventos) ? eventos : [];
+
+        // 1. Popula o Calendário
+        if (calendarInstance) {
+          calendarInstance.removeAllEvents();
+          calendarInstance.addEventSource(cacheEventos);
+        }
+
+        // 2. Popula a Tabela/Lista Ordenada
+        renderizarTabelaAgenda(cacheEventos);
+
+        Toast.fire({ icon: 'info', title: `${cacheEventos.length} agendamentos carregados.` });
       } catch (err) {
-        console.error('Erro ao carregar eventos:', err);
+        console.error('Erro ao carregar agendamentos:', err);
+        Toast.fire({ icon: 'error', title: 'Erro ao carregar eventos da obra.' });
       }
     }
 
@@ -612,10 +765,9 @@
     }
 
     // Inicialização
-    setInterval(pollStatus, 2500);
+    setInterval(pollStatus, 3000);
     pollStatus();
     carregarObras();
   </script>
 </body>
 </html>
-

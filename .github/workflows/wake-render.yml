@@ -19,3 +19,4 @@ jobs:
         run: |
           echo "⏰ Acordando Render Web Service..."
           curl -s -f --retry 3 --max-time 60 https://agenda-xpsh.onrender.com/api/wake || echo "Aviso: Render em processo de boot."
+

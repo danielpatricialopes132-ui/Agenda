@@ -76,7 +76,7 @@ async function carregarObrasMonitoradas(forcar = false): Promise<Map<string, Obr
     for (const item of data || []) {
       novoMapa.set(item.obra_id, {
         obra_id: item.obra_id,
-        nome_obra: item.nome_obra,
+        nome_obra: item.nome_obra || 'Obra Sem Nome',
         responsaveis: Array.isArray(item.responsaveis) ? item.responsaveis : [],
         ativa: Boolean(item.ativa),
       });
@@ -100,7 +100,7 @@ async function jaProcessouMensagem(messageId: string): Promise<boolean> {
       .eq('message_id', messageId)
       .maybeSingle();
 
-    return !!data;
+    return !data;
   } catch {
     return false;
   }
@@ -174,7 +174,7 @@ async function relatorioJaEnviado(obraId: string, tipo: 'SEMANAL' | 'DIARIO', da
       .eq('tipo_disparo', tipo)
       .eq('referencia_data', dataRef)
       .maybeSingle();
-    return !!data;
+    return !data;
   } catch {
     return false;
   }
@@ -189,10 +189,10 @@ async function marcarRelatorioEnviado(obraId: string, tipo: 'SEMANAL' | 'DIARIO'
 }
 
 // ==============================================================================
-// 3. Motor de Disparos de Relatórios (Multi-Obras)
+// 3. Motor de Disparos de Relatórios (Multi-Obras com Clean Name Obrigatório)
 // ==============================================================================
 async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
-  const obras = await carregarObrasMonitoradas();
+  const obras = await carregarObrasMonitoradas(true);
   if (obras.size === 0) return;
 
   const agora = new Date();
@@ -203,6 +203,9 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
   console.log(`[Relatórios] Verificando regras de envio: Dia=${diaSemana}, Hora=${hora}h, Data=${hojeIso}`);
 
   for (const [obraId, configObra] of obras.entries()) {
+    // Clean Name garantido via SELECT/Cache em obras_config (nunca o subject bruto do WhatsApp)
+    const cleanName = configObra.nome_obra?.trim() || 'Obra Sem Nome';
+
     // 1. Segunda-feira pela manhã (entre 07:00 e 11:59): Infográfico Semanal em Imagem
     if (diaSemana === 1 && hora >= 7 && hora <= 11) {
       const jaEnviado = await relatorioJaEnviado(obraId, 'SEMANAL', hojeIso);
@@ -214,8 +217,8 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
         const eventos = await buscarEventosPorIntervalo(obraId, hojeIso, dataFimIso);
 
         try {
-          const imagemBuffer = await gerarImagemAgendaSemana(configObra.nome_obra, eventos, 'SEMANAL');
-          const caption = `📋 *Resumo da Semana - ${configObra.nome_obra}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
+          const imagemBuffer = await gerarImagemAgendaSemana(cleanName, eventos, 'SEMANAL');
+          const caption = `📋 *Resumo da Semana - ${cleanName}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
 
           await client.sendMessage(obraId, { image: imagemBuffer, caption });
 
@@ -229,9 +232,9 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
           }
 
           await marcarRelatorioEnviado(obraId, 'SEMANAL', hojeIso);
-          console.log(`✅ Infográfico semanal disparado para "${configObra.nome_obra}".`);
+          console.log(`✅ Infográfico semanal disparado para "${cleanName}".`);
         } catch (imgErr) {
-          console.error('[Relatórios] Falha ao enviar infográfico semanal:', imgErr);
+          console.error(`[Relatórios] Falha ao enviar infográfico semanal para "${cleanName}":`, imgErr);
         }
       }
     }
@@ -243,22 +246,22 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
         const eventos = await buscarEventosDoDia(obraId, hojeIso);
 
         try {
-          // A) Disparo do Infográfico em Imagem
-          const imagemBuffer = await gerarImagemAgendaSemana(configObra.nome_obra, eventos, 'DIARIO');
-          const caption = `🌅 *Lembretes do Dia - ${configObra.nome_obra}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
+          // A) Disparo do Infográfico em Imagem usando o Clean Name
+          const imagemBuffer = await gerarImagemAgendaSemana(cleanName, eventos, 'DIARIO');
+          const caption = `🌅 *Lembretes do Dia - ${cleanName}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
           await client.sendMessage(obraId, { image: imagemBuffer, caption });
 
-          // B) Disparo do Morning Briefing em Áudio (PTT)
+          // B) Disparo do Morning Briefing em Áudio (PTT) usando o Clean Name
           try {
-            const audioBuffer = await gerarAudioBriefing(eventos, configObra.nome_obra);
+            const audioBuffer = await gerarAudioBriefing(eventos, cleanName);
             await client.sendMessage(obraId, {
               audio: audioBuffer,
               mimetype: 'audio/mp4',
               ptt: true,
             });
-            console.log(`🎙️ Morning Briefing em áudio enviado para "${configObra.nome_obra}".`);
+            console.log(`🎙️ Morning Briefing em áudio enviado para "${cleanName}".`);
           } catch (audioErr) {
-            console.warn('[Relatórios] Falha ao enviar áudio TTS:', audioErr);
+            console.warn(`[Relatórios] Falha ao enviar áudio TTS para "${cleanName}":`, audioErr);
           }
 
           // C) Envio para os responsáveis privados
@@ -272,9 +275,9 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
           }
 
           await marcarRelatorioEnviado(obraId, 'DIARIO', hojeIso);
-          console.log(`✅ Lembretes diários disparados para "${configObra.nome_obra}".`);
+          console.log(`✅ Lembretes diários disparados para "${cleanName}".`);
         } catch (imgErr) {
-          console.error('[Relatórios] Falha ao enviar lembretes diários:', imgErr);
+          console.error(`[Relatórios] Falha ao enviar lembretes diários para "${cleanName}":`, imgErr);
         }
       }
     }
@@ -309,7 +312,8 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
     return;
   }
 
-  console.log(`[WhatsApp - ${configObra.nome_obra}]: "${texto}"`);
+  const cleanName = configObra.nome_obra?.trim() || 'Obra Sem Nome';
+  console.log(`[WhatsApp - ${cleanName}]: "${texto}"`);
 
   // Extração via IA (Gemini)
   const hoje = new Date();
@@ -317,7 +321,7 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
   const resultado = await extrairAgendamento(texto, hojeIso);
 
   if (resultado.is_agendamento && resultado.data_iso && resultado.descricao) {
-    console.log(`🎯 [AI - ${configObra.nome_obra}] Agendamento detectado:`, resultado);
+    console.log(`🎯 [AI - ${cleanName}] Agendamento detectado:`, resultado);
 
     const eventosExistentes = await buscarEventosDoDia(remoteJid, resultado.data_iso);
     const analiseConflito = await detectarConflitosAgenda(
@@ -336,7 +340,7 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
         const [ano, mes, dia] = resultado.data_iso.split('-');
         const horarioFmt = resultado.horario || 'Horário comercial (08:00)';
 
-        let mensagemConfirmacao = `✅ *AGENDAMENTO REGISTRADO - ${configObra.nome_obra.toUpperCase()}*\n\n` +
+        let mensagemConfirmacao = `✅ *AGENDAMENTO REGISTRADO - ${cleanName.toUpperCase()}*\n\n` +
           `🗓️ *Data:* ${dia}/${mes}/${ano}\n` +
           `⏰ *Horário:* ${horarioFmt}\n` +
           `📌 *Compromisso:* ${resultado.descricao}\n`;
@@ -361,9 +365,16 @@ async function processarMensagemIndividual(msg: proto.IWebMessageInfo, client: W
 }
 
 // ==============================================================================
-// 5. Conexão Baileys Unificada (com Reconexão Automática)
+// 5. Conexão Baileys Unificada (com Reconexão Automática e Tratamento 440/Conflict)
 // ==============================================================================
+let timeoutReconexao: NodeJS.Timeout | null = null;
+
 async function iniciarBaileys() {
+  if (timeoutReconexao) {
+    clearTimeout(timeoutReconexao);
+    timeoutReconexao = null;
+  }
+
   console.log('[WhatsApp] Carregando sessão remota do Supabase...');
   const { state, saveCreds } = await useSupabaseAuthState('obra_principal');
   saveCredsFn = saveCreds;
@@ -373,6 +384,8 @@ async function iniciarBaileys() {
     printQRInTerminal: false,
     logger: pino({ level: 'silent' }),
     syncFullHistory: false,
+    connectTimeoutMs: 60000,
+    keepAliveIntervalMs: 25000,
   });
 
   sock.ev.on('creds.update', async () => {
@@ -417,12 +430,17 @@ async function iniciarBaileys() {
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const deveReconectar = statusCode !== DisconnectReason.loggedOut;
+      // 440 = connectionReplaced (outra instância ou setup conectou).
+      // DisconnectReason.loggedOut = 401.
+      const isLoggedOut = statusCode === DisconnectReason.loggedOut;
       status = 'desconectado';
-      console.warn(`[WhatsApp] Conexão encerrada (statusCode: ${statusCode}). Reconectando: ${deveReconectar}`);
+      console.warn(`[WhatsApp] Conexão encerrada (statusCode: ${statusCode}).`);
 
-      if (deveReconectar) {
-        setTimeout(() => iniciarBaileys(), 4000);
+      if (!isLoggedOut) {
+        // Se foi código 440 (sessão substituída), aguarda um intervalo maior antes de reconectar para evitar loop
+        const delayMs = statusCode === 440 ? 10000 : 4000;
+        console.log(`[WhatsApp] Agendando reconexão em ${delayMs / 1000}s...`);
+        timeoutReconexao = setTimeout(() => iniciarBaileys(), delayMs);
       } else {
         console.error('[WhatsApp] Dispositivo desconectado (loggedOut). Novo QR Code necessário.');
       }
@@ -451,7 +469,6 @@ async function iniciarBaileys() {
 app.get('/api/wake', async (req: Request, res: Response) => {
   console.log(`⏰ [Despertador] /api/wake acionado às ${new Date().toISOString()}`);
 
-  // Força atualização das obras e checagem de relatórios
   if (sock && status === 'conectado') {
     try {
       await processarRelatoriosPendentes(sock);
@@ -492,6 +509,7 @@ app.get('/api/obras', async (req: Request, res: Response) => {
   }
 });
 
+// Cadastrar / Criar Obra (POST)
 app.post('/api/obras', async (req: Request, res: Response) => {
   try {
     const { obra_id, nome_obra, responsaveis, ativa } = req.body;
@@ -528,6 +546,47 @@ app.post('/api/obras', async (req: Request, res: Response) => {
   }
 });
 
+// Atualizar Obra / Renomear / Editar Responsáveis (PUT)
+app.put('/api/obras/:id', async (req: Request, res: Response) => {
+  try {
+    const obraId = req.params.id;
+    const { nome_obra, responsaveis, ativa } = req.body;
+
+    if (!nome_obra || !nome_obra.trim()) {
+      return res.status(400).json({ error: 'O campo nome_obra é obrigatório para atualização.' });
+    }
+
+    const updatePayload: Record<string, any> = {
+      nome_obra: String(nome_obra).trim(),
+    };
+
+    if (responsaveis !== undefined) {
+      updatePayload.responsaveis = Array.isArray(responsaveis)
+        ? responsaveis.map((n: string) => String(n).replace(/\D/g, '')).filter(Boolean)
+        : [];
+    }
+
+    if (ativa !== undefined) {
+      updatePayload.ativa = Boolean(ativa);
+    }
+
+    const { data, error } = await supabase
+      .from('obras_config')
+      .update(updatePayload)
+      .eq('obra_id', obraId)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    await carregarObrasMonitoradas(true);
+    return res.json({ sucesso: true, obra: data });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Excluir Obra (DELETE)
 app.delete('/api/obras/:id', async (req: Request, res: Response) => {
   try {
     const { error } = await supabase.from('obras_config').delete().eq('obra_id', req.params.id);
@@ -539,7 +598,7 @@ app.delete('/api/obras/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Eventos formatados para o FullCalendar
+// Consulta de Agendamentos (Formatado para FullCalendar + Tabela Ordenada)
 app.get('/api/agenda/:obra_id', async (req: Request, res: Response) => {
   try {
     const obraId = req.params.obra_id;
@@ -547,22 +606,33 @@ app.get('/api/agenda/:obra_id', async (req: Request, res: Response) => {
       .from('agenda_obra')
       .select('*')
       .eq('obra_id', obraId)
-      .order('data_evento', { ascending: true });
+      .order('data_evento', { ascending: true })
+      .order('horario', { ascending: true });
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const eventosFullCalendar = (data || []).map((ev: any) => {
+    const eventosFormatados = (data || []).map((ev: any) => {
       const horario = ev.horario && ev.horario.includes(':') ? ev.horario : '08:00';
       return {
         id: ev.id,
         title: `${horario} - ${ev.descricao}`,
         start: `${ev.data_evento}T${horario}:00`,
         allDay: !ev.horario,
-        extendedProps: { descricao: ev.descricao, horario: ev.horario, obra_id: ev.obra_id },
+        data_evento: ev.data_evento,
+        horario: ev.horario || 'Comercial',
+        descricao: ev.descricao,
+        obra_id: ev.obra_id,
+        created_at: ev.created_at,
+        extendedProps: {
+          data_evento: ev.data_evento,
+          descricao: ev.descricao,
+          horario: ev.horario,
+          obra_id: ev.obra_id,
+        },
       };
     });
 
-    return res.json(eventosFullCalendar);
+    return res.json(eventosFormatados);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
