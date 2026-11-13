@@ -1,0 +1,39 @@
+name: WhatsApp Obra Cron Bot
+
+on:
+  schedule:
+    # Executa a cada 3 horas (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC)
+    - cron: '0 */3 * * *'
+  workflow_dispatch: # Permite disparo manual via interface do GitHub Actions
+
+jobs:
+  run-bot:
+    name: Sincronizar e Processar Agendamentos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5 # Timeout preventivo caso ocorra algum travamento
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Setup do Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalar Dependências
+        run: npm ci
+
+      - name: Build do Projeto TypeScript
+        run: npm run build
+
+      - name: Executar Bot Serverless
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          OBRA_GROUP_ID: ${{ secrets.OBRA_GROUP_ID }}
+          OBRA_ID: ${{ secrets.OBRA_ID || 'obra_principal' }}
+          TZ: 'America/Sao_Paulo' # Garante o fuso horário correto para a lógica de horários das obras
+        run: npm start

@@ -1,99 +1,80 @@
-import cron from 'node-cron';
 import { WASocket } from '@whiskeysockets/baileys';
-import { buscarEventosPorIntervalo, buscarEventosDoDia } from './supabaseService';
 import { config } from '../config/env';
+import {
+  buscarEventosPorIntervalo,
+  buscarEventosDoDia,
+  disparoJaRealizado,
+  registrarDisparo,
+} from './supabaseService';
 
 /**
- * Formata lista de eventos para envio no WhatsApp.
+ * Avalia as janelas de horário e dispara lembretes caso ainda não tenham sido enviados no dia.
  */
-function formatarMensagemSemanal(eventos: any[]): string {
-  if (eventos.length === 0) {
-    return '📋 *Agenda da Semana - Obra*\n\nNenhum agendamento programado para os próximos 5 dias. Tenham uma ótima semana!';
+export async function processarDisparosProgramados(sock: WASocket): Promise<void> {
+  if (!config.obraGroupId) {
+    console.warn('[Disparos] OBRA_GROUP_ID não definido. Pulando disparos.');
+    return;
   }
 
-  let mensagem = '📋 *AGENDA DA SEMANA - OBRA*\n_Previsão dos próximos 5 dias:_\n\n';
-  eventos.forEach((ev) => {
-    const [ano, mes, dia] = ev.data_evento.split('-');
-    mensagem += `🗓️ *${dia}/${mes}* às *${ev.horario}*\n📌 ${ev.descricao}\n\n`;
-  });
+  const agora = new Date();
+  const diaSemana = agora.getDay(); // 0: Domingo, 1: Segunda, ..., 5: Sexta, 6: Sábado
+  const hora = agora.getHours();
+  const hojeIso = agora.toISOString().split('T')[0];
 
-  mensagem += 'Dúvidas ou alterações, favor avisar por aqui!';
-  return mensagem;
-}
+  console.log(`[Disparos] Verificando janelas: Dia da semana = ${diaSemana}, Hora = ${hora}:00, Data = ${hojeIso}`);
 
-/**
- * Formata lista de eventos do dia para envio no WhatsApp.
- */
-function formatarMensagemDiaria(eventos: any[]): string {
-  if (eventos.length === 0) {
-    return '🌅 *Lembretes do Dia - Obra*\n\nNenhum compromisso ou entrega agendada para hoje. Bom trabalho a todos!';
-  }
-
-  let mensagem = '🌅 *LEMBRETES DO DIA - OBRA*\n_Atividades e entregas programadas para hoje:_\n\n';
-  eventos.forEach((ev) => {
-    mensagem += `⏰ *${ev.horario}* - ${ev.descricao}\n`;
-  });
-
-  mensagem += '\nFiquem atentos aos horários!';
-  return mensagem;
-}
-
-/**
- * Inicializa as rotinas cron para envios automáticos no grupo da obra.
- */
-export function inicializarCron(getSock: () => WASocket | null) {
-  // 1. Toda Segunda-feira às 09:00: Agenda da Semana (próximos 5 dias)
-  // Expressão cron: '0 9 * * 1' -> Minuto 0, Hora 9, qualquer dia do mês, qualquer mês, 1 = Segunda
-  cron.schedule('0 9 * * 1', async () => {
-    console.log('[CRON] Executando rotina de Agenda da Semana (Segunda-feira 09:00)...');
-    const sock = getSock();
-    if (!sock || !config.obraGroupId) {
-      console.warn('[CRON] Socket não conectado ou OBRA_GROUP_ID não configurado.');
-      return;
-    }
-
-    try {
-      const hoje = new Date();
+  // 1. Segunda-feira entre 08:00 e 11:00 (Agenda da semana dos próximos 5 dias)
+  if (diaSemana === 1 && hora >= 8 && hora <= 11) {
+    const jaEnviado = await disparoJaRealizado('SEMANAL', hojeIso);
+    if (!jaEnviado) {
+      console.log('[Disparos] Executando disparo de Agenda da Semana...');
       const em5Dias = new Date();
-      em5Dias.setDate(hoje.getDate() + 5);
-
-      const dataInicio = hoje.toISOString().split('T')[0];
+      em5Dias.setDate(agora.getDate() + 5);
       const dataFim = em5Dias.toISOString().split('T')[0];
 
-      const eventos = await buscarEventosPorIntervalo(config.obraId, dataInicio, dataFim);
-      const mensagem = formatarMensagemSemanal(eventos);
+      const eventos = await buscarEventosPorIntervalo(config.obraId, hojeIso, dataFim);
+      let mensagem = '📋 *AGENDA DA SEMANA - OBRA*\n_Previsão dos próximos 5 dias:_\n\n';
+
+      if (eventos.length === 0) {
+        mensagem += 'Nenhum agendamento programado para os próximos dias. Bom trabalho a todos!';
+      } else {
+        eventos.forEach((ev) => {
+          const [ano, mes, dia] = ev.data_evento.split('-');
+          mensagem += `🗓️ *${dia}/${mes}* às *${ev.horario}*\n📌 ${ev.descricao}\n\n`;
+        });
+        mensagem += 'Dúvidas ou atualizações, favor avisar no grupo!';
+      }
 
       await sock.sendMessage(config.obraGroupId, { text: mensagem });
-      console.log('[CRON] Mensagem da agenda semanal enviada com sucesso!');
-    } catch (err) {
-      console.error('[CRON] Erro ao disparar agenda semanal:', err);
+      await registrarDisparo('SEMANAL', hojeIso);
+      console.log('✅ Agenda da semana enviada e registrada no Supabase!');
+    } else {
+      console.log('[Disparos] Agenda da semana já foi enviada hoje.');
     }
-  });
+  }
 
-  // 2. Terça a Sexta às 07:00: Lembretes do Dia
-  // Expressão cron: '0 7 * * 2-5' -> Minuto 0, Hora 7, 2-5 = Terça a Sexta
-  cron.schedule('0 7 * * 2-5', async () => {
-    console.log('[CRON] Executando rotina de Lembretes do Dia (Terça a Sexta 07:00)...');
-    const sock = getSock();
-    if (!sock || !config.obraGroupId) {
-      console.warn('[CRON] Socket não conectado ou OBRA_GROUP_ID não configurado.');
-      return;
-    }
-
-    try {
-      const hojeIso = new Date().toISOString().split('T')[0];
+  // 2. Terça a Sexta entre 06:00 e 09:00 (Lembretes do dia)
+  if (diaSemana >= 2 && diaSemana <= 5 && hora >= 6 && hora <= 9) {
+    const jaEnviado = await disparoJaRealizado('DIARIO', hojeIso);
+    if (!jaEnviado) {
+      console.log('[Disparos] Executando disparo de Lembretes do Dia...');
       const eventos = await buscarEventosDoDia(config.obraId, hojeIso);
-      const mensagem = formatarMensagemDiaria(eventos);
+      let mensagem = '🌅 *LEMBRETES DO DIA - OBRA*\n_Atividades e entregas programadas para hoje:_\n\n';
+
+      if (eventos.length === 0) {
+        mensagem += 'Nenhum compromisso ou entrega agendada para hoje. Tenham um excelente dia de trabalho!';
+      } else {
+        eventos.forEach((ev) => {
+          mensagem += `⏰ *${ev.horario}* - ${ev.descricao}\n`;
+        });
+        mensagem += '\nFiquem atentos aos horários das frentes de serviço!';
+      }
 
       await sock.sendMessage(config.obraGroupId, { text: mensagem });
-      console.log('[CRON] Mensagem de lembretes diários enviada com sucesso!');
-    } catch (err) {
-      console.error('[CRON] Erro ao disparar lembretes do dia:', err);
+      await registrarDisparo('DIARIO', hojeIso);
+      console.log('✅ Lembretes do dia enviados e registrados no Supabase!');
+    } else {
+      console.log('[Disparos] Lembretes do dia já foram enviados hoje.');
     }
-  });
-
-  console.log('⏰ Rotinas cron agendadas:');
-  console.log('   - Segunda-feira às 09:00 (Agenda dos próximos 5 dias)');
-  console.log('   - Terça a Sexta às 07:00 (Lembretes do dia)');
+  }
 }
-

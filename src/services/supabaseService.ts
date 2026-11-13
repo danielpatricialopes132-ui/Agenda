@@ -1,22 +1,50 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config/env';
 
-/**
- * Cliente configurado do Supabase para operações no banco de dados.
- */
 export const supabase = createClient(config.supabaseUrl, config.supabaseKey);
 
 export interface AgendaObra {
   id?: string;
   obra_id: string;
-  data_evento: string; // formato YYYY-MM-DD
-  horario: string;     // formato HH:MM
+  data_evento: string; // YYYY-MM-DD
+  horario: string;     // HH:MM
   descricao: string;
   created_at?: string;
 }
 
 /**
- * Salva um novo evento/agendamento de obra na tabela agenda_obra.
+ * Verifica se uma mensagem já foi processada anteriormente.
+ */
+export async function mensagemJaProcessada(messageId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('mensagens_processadas')
+    .select('message_id')
+    .eq('message_id', messageId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Supabase] Erro ao checar mensagem processada:', error.message);
+    return false;
+  }
+
+  return !!data;
+}
+
+/**
+ * Marca uma mensagem como processada na tabela de deduplicação.
+ */
+export async function marcarMensagemProcessada(messageId: string, remoteJid: string): Promise<void> {
+  const { error } = await supabase
+    .from('mensagens_processadas')
+    .insert([{ message_id: messageId, remote_jid: remoteJid }]);
+
+  if (error && error.code !== '23505') { // ignora erro de chave duplicada
+    console.error('[Supabase] Erro ao marcar mensagem como processada:', error.message);
+  }
+}
+
+/**
+ * Salva um novo agendamento na tabela agenda_obra.
  */
 export async function salvarAgendamento(evento: Omit<AgendaObra, 'id' | 'created_at'>): Promise<AgendaObra | null> {
   const { data, error } = await supabase
@@ -33,7 +61,7 @@ export async function salvarAgendamento(evento: Omit<AgendaObra, 'id' | 'created
     .single();
 
   if (error) {
-    console.error('Erro ao salvar agendamento no Supabase:', error.message);
+    console.error('[Supabase] Erro ao salvar agendamento:', error.message);
     return null;
   }
 
@@ -41,24 +69,24 @@ export async function salvarAgendamento(evento: Omit<AgendaObra, 'id' | 'created
 }
 
 /**
- * Busca eventos de uma obra entre um intervalo de datas.
+ * Busca eventos em um intervalo de datas para o resumo semanal.
  */
 export async function buscarEventosPorIntervalo(
   obraId: string,
-  dataInicio: string,
-  dataFim: string
+  inicio: string,
+  fim: string
 ): Promise<AgendaObra[]> {
   const { data, error } = await supabase
     .from('agenda_obra')
     .select('*')
     .eq('obra_id', obraId)
-    .gte('data_evento', dataInicio)
-    .lte('data_evento', dataFim)
+    .gte('data_evento', inicio)
+    .lte('data_evento', fim)
     .order('data_evento', { ascending: true })
     .order('horario', { ascending: true });
 
   if (error) {
-    console.error('Erro ao consultar eventos no Supabase:', error.message);
+    console.error('[Supabase] Erro ao buscar intervalo de eventos:', error.message);
     return [];
   }
 
@@ -66,7 +94,7 @@ export async function buscarEventosPorIntervalo(
 }
 
 /**
- * Busca eventos do dia exato para uma obra.
+ * Busca eventos do dia para os lembretes diários.
  */
 export async function buscarEventosDoDia(obraId: string, dataIso: string): Promise<AgendaObra[]> {
   const { data, error } = await supabase
@@ -77,10 +105,41 @@ export async function buscarEventosDoDia(obraId: string, dataIso: string): Promi
     .order('horario', { ascending: true });
 
   if (error) {
-    console.error('Erro ao consultar eventos do dia no Supabase:', error.message);
+    console.error('[Supabase] Erro ao buscar eventos do dia:', error.message);
     return [];
   }
 
   return data || [];
 }
 
+/**
+ * Verifica se o disparo programado (SEMANAL ou DIARIO) já foi enviado hoje.
+ */
+export async function disparoJaRealizado(tipo: 'SEMANAL' | 'DIARIO', dataRef: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('disparos_executados')
+    .select('id')
+    .eq('tipo_disparo', tipo)
+    .eq('referencia_data', dataRef)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Supabase] Erro ao checar disparo já realizado:', error.message);
+    return false;
+  }
+
+  return !!data;
+}
+
+/**
+ * Registra o disparo como executado para evitar disparos duplicados na mesma janela.
+ */
+export async function registrarDisparo(tipo: 'SEMANAL' | 'DIARIO', dataRef: string): Promise<void> {
+  const { error } = await supabase
+    .from('disparos_executados')
+    .insert([{ tipo_disparo: tipo, referencia_data: dataRef }]);
+
+  if (error && error.code !== '23505') {
+    console.error('[Supabase] Erro ao registrar disparo:', error.message);
+  }
+}
