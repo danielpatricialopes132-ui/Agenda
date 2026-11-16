@@ -11,7 +11,12 @@ import path from 'path';
 import dotenv from 'dotenv';
 
 import { useSupabaseAuthState, supabase } from './lib/useSupabaseAuthState';
-import { extrairAgendamento, detectarConflitosAgenda } from './lib/aiProcessor';
+import {
+  extrairAgendamento,
+  detectarConflitosAgenda,
+  extrairMultiplosEventosTexto,
+  gerarSolucaoEngenharia,
+} from './lib/aiProcessor';
 import { gerarImagemAgendaSemana, EventoRelatorio } from './lib/reportGenerator';
 import { gerarAudioBriefing } from './lib/audioBriefing';
 import { acquireLock, startHeartbeat, releaseLock } from './lib/mutex';
@@ -249,12 +254,10 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
         const eventos = await buscarEventosDoDia(obraId, hojeIso);
 
         try {
-          // A) Disparo do Infográfico em Imagem
           const imagemBuffer = await gerarImagemAgendaSemana(cleanName, eventos, 'DIARIO');
           const caption = `🌅 *Lembretes do Dia - ${cleanName}*\nResumo da agenda atualizado. Bom trabalho à equipe!`;
           await client.sendMessage(obraId, { image: imagemBuffer, caption });
 
-          // B) Disparo do Morning Briefing em Áudio (PTT)
           try {
             const audioBuffer = await gerarAudioBriefing(eventos, cleanName);
             await client.sendMessage(obraId, {
@@ -267,7 +270,6 @@ async function processarRelatoriosPendentes(client: WASocket): Promise<void> {
             console.warn(`[Relatórios] Falha ao enviar áudio TTS para "${cleanName}":`, audioErr);
           }
 
-          // C) Envio para os responsáveis privados
           for (const telefone of configObra.responsaveis) {
             const numeroLimpo = telefone.replace(/\D/g, '');
             if (numeroLimpo.length >= 10) {
@@ -423,7 +425,6 @@ async function iniciarBaileys() {
           }));
           console.log(`[WhatsApp] ${gruposLista.length} grupos identificados.`);
 
-          // Processa relatórios pendentes ao conectar
           await processarRelatoriosPendentes(sock);
         }
       } catch (err) {
@@ -640,13 +641,132 @@ app.get('/api/agenda/:obra_id', async (req: Request, res: Response) => {
   }
 });
 
+// ==============================================================================
+// 7. NOVAS FEATURES INTELIGENTES: CHAT DE PROCESSAMENTO E CHAT DE ENGENHARIA
+// ==============================================================================
+
+/**
+ * Endpoint 1: Processador de Texto Externo (SMS / E-mails / Minutas)
+ * Analisa o texto, extrai datas/eventos e sugere a obra correspondente.
+ */
+app.post('/api/ai/processar-texto', async (req: Request, res: Response) => {
+  try {
+    const { texto } = req.body;
+    if (!texto || !String(texto).trim()) {
+      return res.status(400).json({ sucesso: false, error: 'O texto a ser analisado é obrigatório.' });
+    }
+
+    const mapaObras = await carregarObrasMonitoradas();
+    const listaObras = Array.from(mapaObras.values()).map(o => ({
+      obra_id: o.obra_id,
+      nome_obra: o.nome_obra,
+    }));
+
+    const hojeIso = new Date().toISOString().split('T')[0];
+    const resultado = await extrairMultiplosEventosTexto(String(texto), hojeIso, listaObras);
+
+    return res.json({
+      sucesso: true,
+      data: resultado,
+      obras_disponiveis: listaObras,
+    });
+  } catch (err: any) {
+    console.error('[API] Erro ao processar texto externo:', err);
+    return res.status(500).json({ sucesso: false, error: err?.message || 'Erro ao processar texto com IA.' });
+  }
+});
+
+/**
+ * Endpoint 2: Confirmação e Inserção de Agendamentos Extraídos para a Obra Selecionada
+ */
+app.post('/api/ai/confirmar-agendamentos', async (req: Request, res: Response) => {
+  try {
+    const { obra_id, eventos } = req.body;
+
+    if (!obra_id) {
+      return res.status(400).json({ sucesso: false, error: 'É obrigatório selecionar a obra de destino.' });
+    }
+
+    if (!Array.isArray(eventos) || eventos.length === 0) {
+      return res.status(400).json({ sucesso: false, error: 'A lista de eventos está vazia.' });
+    }
+
+    const mapaObras = await carregarObrasMonitoradas();
+    const configObra = mapaObras.get(obra_id);
+    const cleanName = configObra?.nome_obra || 'Obra';
+
+    const registrosParaInserir = eventos.map((ev: any) => ({
+      obra_id,
+      data_evento: ev.data_iso,
+      horario: ev.horario || '08:00',
+      descricao: ev.descricao,
+    }));
+
+    const { data, error } = await supabase
+      .from('agenda_obra')
+      .insert(registrosParaInserir)
+      .select();
+
+    if (error) {
+      return res.status(500).json({ sucesso: false, error: error.message });
+    }
+
+    // Opcional: Se o bot estiver conectado, envia notificação no grupo da obra
+    if (sock && status === 'conectado') {
+      try {
+        let msgNotificacao = `📋 *NOVOS AGENDAMENTOS REGISTRADOS VIA PAINEL*\n*Obra:* ${cleanName.toUpperCase()}\n\n`;
+        eventos.forEach((ev: any, i: number) => {
+          const [ano, mes, dia] = (ev.data_iso || '').split('-');
+          const dataFmt = (dia && mes && ano) ? `${dia}/${mes}/${ano}` : ev.data_iso;
+          msgNotificacao += `${i + 1}. 🗓️ *${dataFmt}* às *${ev.horario || 'Comercial'}*: ${ev.descricao}\n`;
+        });
+        await sock.sendMessage(obra_id, { text: msgNotificacao.trim() });
+      } catch (waErr) {
+        console.warn('[WhatsApp] Não foi possível enviar notificação de agendamento em lote:', waErr);
+      }
+    }
+
+    return res.json({
+      sucesso: true,
+      mensagem: `${eventos.length} agendamento(s) inserido(s) com sucesso na obra "${cleanName}".`,
+      inseridos: data,
+    });
+  } catch (err: any) {
+    console.error('[API] Erro ao confirmar agendamentos em lote:', err);
+    return res.status(500).json({ sucesso: false, error: err?.message || 'Erro ao persistir agendamentos.' });
+  }
+});
+
+/**
+ * Endpoint 3: Chat de Engenharia de Soluções (Ticket Generator + Prompt IDE)
+ */
+app.post('/api/ai/engenharia-solucoes', async (req: Request, res: Response) => {
+  try {
+    const { descricao, historico } = req.body;
+
+    if (!descricao || !String(descricao).trim()) {
+      return res.status(400).json({ sucesso: false, error: 'A descrição da necessidade é obrigatória.' });
+    }
+
+    const solucao = await gerarSolucaoEngenharia(String(descricao), historico || '');
+
+    return res.json({
+      sucesso: true,
+      solucao,
+    });
+  } catch (err: any) {
+    console.error('[API] Erro no gerador de soluções:', err);
+    return res.status(500).json({ sucesso: false, error: err?.message || 'Falha ao sintetizar solução técnica.' });
+  }
+});
+
 // Rota raiz (Frontend SPA em public/index.html)
 app.get('/', (req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 // ==============================================================================
-// 7. Inicialização do Servidor com Trava Lógica (Distributed Mutex)
+// 8. Inicialização do Servidor com Trava Lógica (Distributed Mutex)
 // ==============================================================================
 app.listen(PORT, async () => {
   console.log('\n=============================================================');
@@ -655,7 +775,6 @@ app.listen(PORT, async () => {
   console.log(`⏰ Rota do despertador pronta: /api/wake`);
   console.log('=============================================================\n');
 
-  // Trava Distribuída para Concorrência Baileys
   console.log(`[MUTEX] Verificando posse do lock para a instância "${instanceName}"...`);
   const canStartBot = await acquireLock(instanceName);
 

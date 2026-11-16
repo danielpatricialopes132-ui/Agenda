@@ -106,3 +106,4 @@ Para evitar quedas, o GADAP Hub utiliza um **Lock Distribuído** no banco de dad
 
 ---
 *GADAP Hub - Documentação Oficial do Sistema.*
+

@@ -54,13 +54,13 @@
         <h1 class="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
           GADAP Hub
         </h1>
-        <p class="text-[11px] text-slate-400 font-medium">Gestão de Obras</p>
+        <p class="text-[11px] text-slate-400 font-medium">Gestão de Obras & IA</p>
       </div>
     </div>
 
     <!-- Navegação Principal -->
-    <nav class="flex-1 p-4 space-y-1.5 overflow-y-auto">
-      <div class="text-[10px] uppercase font-bold text-slate-500 px-3 pb-2 pt-1 tracking-wider">Módulos</div>
+    <nav class="flex-1 p-4 space-y-1.5 overflow-y-auto custom-scroll">
+      <div class="text-[10px] uppercase font-bold text-slate-500 px-3 pb-2 pt-1 tracking-wider">Operação Canteiro</div>
 
       <!-- Aba 1: Conexão WhatsApp -->
       <button onclick="navegarPara('conexao')" id="nav-btn-conexao" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
@@ -86,7 +86,25 @@
         <span>Consulta de Agenda</span>
       </button>
 
-      <!-- Aba 4: Ajuda / Tutoriais -->
+      <div class="text-[10px] uppercase font-bold text-slate-500 px-3 pb-2 pt-4 tracking-wider">Módulos Inteligentes</div>
+
+      <!-- Aba 4: Chat Extrator de Textos (SMS / E-mails / Minutas) -->
+      <button onclick="navegarPara('extrator')" id="nav-btn-extrator" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+        <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+        </svg>
+        <span>Processar SMS / Texto</span>
+      </button>
+
+      <!-- Aba 5: Chat Engenharia de Soluções (Ticket & Prompt IDE) -->
+      <button onclick="navegarPara('engenharia')" id="nav-btn-engenharia" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+        <svg class="w-4 h-4 text-fuchsia-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+        </svg>
+        <span>Engenharia & Prompts</span>
+      </button>
+
+      <!-- Aba 6: Ajuda / Tutoriais -->
       <button onclick="navegarPara('ajuda')" id="nav-btn-ajuda" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-slate-400 hover:text-white hover:bg-slate-800/60">
         <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -295,14 +313,163 @@
       </section>
 
       <!-- ========================================================================== -->
-      <!-- ABA 4: AJUDA / TUTORIAIS (DOCUMENTAÇÃO INTEGRADA & FAQ) -->
+      <!-- ABA 4: CHAT EXTRATOR DE TEXTOS EXTERNOS (SMS / E-MAILS / MINUTAS) -->
+      <!-- ========================================================================== -->
+      <section id="view-extrator" class="max-w-4xl mx-auto space-y-6 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+          <div class="flex items-center space-x-3 pb-4 border-b border-slate-800">
+            <div class="w-10 h-10 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
+              📱
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white">Assistente de Ingestão de Textos & SMS</h3>
+              <p class="text-xs text-slate-400">Cole mensagens de fornecedores, transportadoras ou SMS. A IA identificará os eventos e perguntará a obra correspondente.</p>
+            </div>
+          </div>
+
+          <!-- Área de Entrada de Texto -->
+          <div class="mt-5 space-y-3">
+            <label class="block text-xs font-semibold text-slate-300">
+              Cole o texto bruto (SMS, WhatsApp, E-mail de fornecedor):
+            </label>
+            <textarea id="extrator-input-texto" rows="5" class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-purple-500 custom-scroll font-sans" placeholder="Exemplo: 'Prezado cliente, informamos que as carretas de drywall da Obra Leopoldo estão agendadas para entrega no dia 20/11 às 08:30. Já a instalação das persianas ocorrerá na sexta-feira às 14h.'"></textarea>
+
+            <div class="flex items-center justify-between pt-2">
+              <span class="text-[11px] text-slate-500">Dica: A IA detecta múltiplos eventos e tenta sugerir a obra automaticamente.</span>
+              <button onclick="processarTextoExterno()" id="btn-processar-texto" class="px-5 py-2.5 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/30 transition flex items-center gap-2">
+                <span>✨ Processar com IA</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultados e Confirmação da Obra -->
+        <div id="extrator-resultado-box" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl hidden space-y-5">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                Eventos Identificados pela IA
+              </h4>
+              <p id="extrator-resumo-contexto" class="text-xs text-slate-400 mt-1"></p>
+            </div>
+            <span id="extrator-badge-total" class="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">0 eventos</span>
+          </div>
+
+          <!-- Tabela de Pré-visualização dos Eventos -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-400 text-[11px] uppercase font-bold">
+                  <th class="py-2.5 px-3">Data</th>
+                  <th class="py-2.5 px-3">Horário</th>
+                  <th class="py-2.5 px-3">Compromisso</th>
+                  <th class="py-2.5 px-3">Categoria</th>
+                  <th class="py-2.5 px-3 text-right">Confiança</th>
+                </tr>
+              </thead>
+              <tbody id="extrator-tabela-body" class="divide-y divide-slate-800/60 text-slate-300"></tbody>
+            </table>
+          </div>
+
+          <!-- Pergunta / Seleção da Obra Alvo -->
+          <div class="p-5 bg-purple-950/20 border border-purple-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h5 class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>📍</span> A qual obra estes agendamentos se relacionam?
+              </h5>
+              <p id="extrator-sugestao-obra-texto" class="text-[11px] text-purple-300 mt-0.5">Selecione a obra de destino para registrar os eventos na agenda.</p>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <select id="extrator-select-obra" class="bg-slate-950 border border-purple-500/40 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-400 font-semibold cursor-pointer w-56">
+                <option value="">Selecione a obra...</option>
+              </select>
+
+              <button onclick="confirmarAgendamentosLote()" id="btn-confirmar-lote" class="px-5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 transition whitespace-nowrap">
+                Salvar na Agenda
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================== -->
+      <!-- ABA 5: CHAT DE ENGENHARIA DE SOLUÇÕES & GERADOR DE PROMPTS PARA IDE -->
+      <!-- ========================================================================== -->
+      <section id="view-engenharia" class="max-w-4xl mx-auto space-y-6 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+          <div class="flex items-center space-x-3 pb-4 border-b border-slate-800">
+            <div class="w-10 h-10 rounded-2xl bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-400 flex items-center justify-center font-bold">
+              ⚡
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white">Laboratório de Engenharia de Soluções</h3>
+              <p class="text-xs text-slate-400">Identificou uma melhoria ou relatório novo? Descreva a necessidade e gere um Ticket com o Prompt de Engenharia exato para colar na IDE.</p>
+            </div>
+          </div>
+
+          <!-- Entrada da Demanda -->
+          <div class="mt-5 space-y-3">
+            <label class="block text-xs font-semibold text-slate-300">
+              Descreva o que você precisa desenvolver ou aprimorar:
+            </label>
+            <textarea id="eng-input-descricao" rows="4" class="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-fuchsia-500 custom-scroll font-sans" placeholder="Ex: 'Preciso de um relatório executivo de fornecedores com atraso e uma rota GET /api/relatorios/atrasos que cruze os eventos da semana com o status da obra Leopoldo.'"></textarea>
+
+            <div class="flex items-center justify-between pt-2">
+              <span class="text-[11px] text-slate-500">A IA cria o ticket, mapeia os arquivos do projeto e gera o prompt em markdown.</span>
+              <button onclick="gerarPromptEngenharia()" id="btn-gerar-prompt-eng" class="px-5 py-2.5 rounded-xl text-xs font-semibold bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-600/30 transition flex items-center gap-2">
+                <span>🚀 Gerar Ticket & Prompt</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exibição do Ticket e Prompt Gerado -->
+        <div id="eng-resultado-box" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl hidden space-y-5">
+          <!-- Cabeçalho do Ticket -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span id="eng-ticket-badge" class="px-2.5 py-0.5 rounded-md bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30 font-mono text-[11px] font-bold">TCK-0000</span>
+                <h4 id="eng-titulo-demanda" class="text-sm font-bold text-white">Título da Demanda</h4>
+              </div>
+              <p id="eng-resumo-executivo" class="text-xs text-slate-400 mt-1"></p>
+            </div>
+            <button onclick="copiarPromptIDE()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-xl border border-slate-700 transition flex items-center gap-1.5 self-start">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+              </svg>
+              <span>Copiar Prompt para a IDE</span>
+            </button>
+          </div>
+
+          <!-- Mapeamento de Arquivos -->
+          <div class="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-2">
+            <h5 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Arquivos Afetados no Projeto:</h5>
+            <div id="eng-arquivos-tags" class="flex flex-wrap gap-2"></div>
+          </div>
+
+          <!-- Prompt Completo Formatado para a IDE -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold text-white flex items-center gap-2">
+                <span>📋</span> Prompt Pronto para Colar na IDE (Antigravity / Cursor / Claude Code):
+              </label>
+              <span class="text-[10px] text-slate-500">Inclui Ticket de Início e Critérios de Conclusão</span>
+            </div>
+            <pre id="eng-prompt-pre" class="p-4 bg-slate-950 border border-slate-800/80 rounded-2xl text-xs font-mono text-emerald-400/90 whitespace-pre-wrap select-all max-h-96 overflow-y-auto custom-scroll"></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================== -->
+      <!-- ABA 6: AJUDA / TUTORIAIS (DOCUMENTAÇÃO INTEGRADA & FAQ) -->
       <!-- ========================================================================== -->
       <section id="view-ajuda" class="max-w-5xl mx-auto space-y-8 hidden pb-12">
         
-        <!-- Cards de Acesso Rápido (3 Blocos Superiores) -->
+        <!-- Cards de Acesso Rápido -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          <!-- Bloco 1: Conectar -->
           <div class="bg-slate-900 border border-slate-800 hover:border-emerald-500/40 rounded-3xl p-6 shadow-xl transition flex flex-col justify-between">
             <div>
               <div class="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4">
@@ -320,7 +487,6 @@
             </button>
           </div>
 
-          <!-- Bloco 2: Cadastrar Obras -->
           <div class="bg-slate-900 border border-slate-800 hover:border-blue-500/40 rounded-3xl p-6 shadow-xl transition flex flex-col justify-between">
             <div>
               <div class="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4">
@@ -338,7 +504,6 @@
             </button>
           </div>
 
-          <!-- Bloco 3: Interagir -->
           <div class="bg-slate-900 border border-slate-800 hover:border-cyan-500/40 rounded-3xl p-6 shadow-xl transition flex flex-col justify-between">
             <div>
               <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center mb-4">
@@ -355,10 +520,9 @@
               Ver Agenda &rarr;
             </button>
           </div>
-
         </div>
 
-        <!-- Dicas de IA (Caixa com Fundo Destacado) -->
+        <!-- Dicas de IA -->
         <div class="bg-gradient-to-r from-blue-950/80 via-slate-900 to-indigo-950/80 border border-blue-500/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
           <div class="flex items-start gap-4">
             <div class="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center flex-shrink-0 text-xl font-bold">
@@ -375,7 +539,7 @@
           </div>
         </div>
 
-        <!-- FAQ Interativo (Accordions) -->
+        <!-- FAQ Interativo -->
         <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
           <h3 class="text-sm font-bold text-white pb-3 border-b border-slate-800 flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-md shadow-amber-400/50"></span>
@@ -383,8 +547,6 @@
           </h3>
 
           <div class="space-y-3">
-            
-            <!-- Accordion 1 -->
             <div class="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/50">
               <button onclick="toggleFaq('faq-1')" class="w-full text-left px-5 py-4 flex items-center justify-between text-xs font-bold text-white hover:bg-slate-800/40 transition">
                 <span>Por que o bot não está a responder no grupo de WhatsApp?</span>
@@ -397,7 +559,6 @@
               </div>
             </div>
 
-            <!-- Accordion 2 -->
             <div class="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/50">
               <button onclick="toggleFaq('faq-2')" class="w-full text-left px-5 py-4 flex items-center justify-between text-xs font-bold text-white hover:bg-slate-800/40 transition">
                 <span>O que significa o aviso de Trava de Segurança (Mutex)?</span>
@@ -408,7 +569,6 @@
               </div>
             </div>
 
-            <!-- Accordion 3 -->
             <div class="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/50">
               <button onclick="toggleFaq('faq-3')" class="w-full text-left px-5 py-4 flex items-center justify-between text-xs font-bold text-white hover:bg-slate-800/40 transition">
                 <span>Como e quando os responsáveis recebem os relatórios de manhã?</span>
@@ -419,7 +579,6 @@
               </div>
             </div>
 
-            <!-- Accordion 4 -->
             <div class="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950/50">
               <button onclick="toggleFaq('faq-4')" class="w-full text-left px-5 py-4 flex items-center justify-between text-xs font-bold text-white hover:bg-slate-800/40 transition">
                 <span>O que é o "Nome de Disparo (Clean Name)"?</span>
@@ -429,7 +588,6 @@
                 Muitos grupos no WhatsApp usam títulos longos com emojis ou números de contrato. O Clean Name é o nome formal que você dá à obra (exemplo: <em>"Obra Leopoldo"</em>). É esse nome limpo que o bot usa nas imagens e pronuncia na mensagem de voz de bom dia.
               </div>
             </div>
-
           </div>
         </div>
 
@@ -486,11 +644,14 @@
   <!-- ============================================================================== -->
   <script>
     let abaAtual = 'obras';
-    let modoVisaoAtual = 'calendario'; // 'calendario' ou 'tabela'
+    let modoVisaoAtual = 'calendario';
     let cacheGrupos = [];
     let cacheObras = [];
     let cacheEventos = [];
     let calendarInstance = null;
+
+    // Cache temporário do Extrator Lote
+    let extratorEventosTemporarios = [];
 
     // Toast de Feedback
     const Toast = Swal.mixin({
@@ -517,7 +678,7 @@
 
     function navegarPara(aba) {
       abaAtual = aba;
-      const abas = ['conexao', 'obras', 'agenda', 'ajuda'];
+      const abas = ['conexao', 'obras', 'agenda', 'extrator', 'engenharia', 'ajuda'];
 
       abas.forEach(nome => {
         const btn = document.getElementById('nav-btn-' + nome);
@@ -549,6 +710,13 @@
         if (calendarInstance) {
           setTimeout(() => calendarInstance.render(), 100);
         }
+      } else if (aba === 'extrator') {
+        topTitle.innerText = 'Assistente de Ingestão de Textos';
+        topSubtitle.innerText = 'Cole SMS, e-mails ou mensagens para extração de datas e vinculação à obra';
+        atualizarSelectObrasExtrator();
+      } else if (aba === 'engenharia') {
+        topTitle.innerText = 'Engenharia de Soluções & Prompts';
+        topSubtitle.innerText = 'Descreva a necessidade funcional e gere o prompt técnico pronto para a IDE';
       } else if (aba === 'ajuda') {
         topTitle.innerText = 'Ajuda & Tutoriais';
         topSubtitle.innerText = 'Guia de operação e boas práticas da Inteligência Artificial';
@@ -628,6 +796,7 @@
           Toast.fire({ icon: 'success', title: modo === 'editar' ? 'Obra atualizada com sucesso!' : 'Obra cadastrada com sucesso!' });
           await carregarObras();
           renderizarGrupos();
+          atualizarSelectObrasExtrator();
         } else {
           Swal.fire({
             icon: 'error',
@@ -667,6 +836,7 @@
           Toast.fire({ icon: 'success', title: 'Obra removida.' });
           await carregarObras();
           renderizarGrupos();
+          atualizarSelectObrasExtrator();
         }
       } catch (err) {
         Toast.fire({ icon: 'error', title: 'Falha ao remover obra.' });
@@ -713,7 +883,6 @@
       const obras = Array.isArray(cacheObras) ? cacheObras : [];
       countEl.innerText = obras.length + ' monitoradas';
 
-      // Atualiza o select da Tela de Consulta de Agenda
       const obraSelecionadaAnterior = selectAgenda.value;
       selectAgenda.innerHTML = '<option value="">Selecione uma obra...</option>' + obras.map(o => `<option value="${o.obra_id}">${o.nome_obra}</option>`).join('');
       if (obraSelecionadaAnterior && obras.some(o => o.obra_id === obraSelecionadaAnterior)) {
@@ -768,6 +937,7 @@
         const json = await res.json();
         cacheObras = Array.isArray(json.obras) ? json.obras : [];
         renderizarObras();
+        atualizarSelectObrasExtrator();
       } catch (err) {
         console.error('Erro ao carregar obras:', err);
       }
@@ -852,20 +1022,233 @@
         const eventos = await res.json();
         cacheEventos = Array.isArray(eventos) ? eventos : [];
 
-        // 1. Popula o Calendário
         if (calendarInstance) {
           calendarInstance.removeAllEvents();
           calendarInstance.addEventSource(cacheEventos);
         }
 
-        // 2. Popula a Tabela/Lista Ordenada
         renderizarTabelaAgenda(cacheEventos);
-
         Toast.fire({ icon: 'info', title: `${cacheEventos.length} agendamentos carregados.` });
       } catch (err) {
         console.error('Erro ao carregar agendamentos:', err);
         Toast.fire({ icon: 'error', title: 'Erro ao carregar eventos da obra.' });
       }
+    }
+
+    // ==============================================================================
+    // LÓGICA DO ASSISTENTE EXTRATOR DE TEXTOS (SMS / E-MAILS)
+    // ==============================================================================
+    function atualizarSelectObrasExtrator() {
+      const select = document.getElementById('extrator-select-obra');
+      if (!select) return;
+      const valorAtual = select.value;
+      select.innerHTML = '<option value="">Selecione a obra de destino...</option>' +
+        cacheObras.map(o => `<option value="${o.obra_id}">${o.nome_obra}</option>`).join('');
+      if (valorAtual) select.value = valorAtual;
+    }
+
+    async function processarTextoExterno() {
+      const texto = document.getElementById('extrator-input-texto').value;
+      if (!texto.trim()) {
+        Swal.fire({ icon: 'warning', title: 'Texto Vazio', text: 'Cole um SMS ou mensagem para analisar.', background: '#0f172a', color: '#fff' });
+        return;
+      }
+
+      const btn = document.getElementById('btn-processar-texto');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Analisando com IA...</span>';
+
+      try {
+        const res = await fetch('/api/ai/processar-texto', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto }),
+        });
+
+        const json = await res.json();
+        if (!json.sucesso || !json.data) {
+          throw new Error(json.error || 'Falha ao processar texto.');
+        }
+
+        const data = json.data;
+        extratorEventosTemporarios = Array.isArray(data.eventos) ? data.eventos : [];
+
+        if (extratorEventosTemporarios.length === 0) {
+          Swal.fire({
+            icon: 'info',
+            title: 'Nenhum Agendamento Encontrado',
+            text: 'A IA leu o texto, mas não encontrou datas ou compromissos futuros explícitos.',
+            background: '#0f172a',
+            color: '#fff',
+          });
+          document.getElementById('extrator-resultado-box').classList.add('hidden');
+          return;
+        }
+
+        // Exibe resultados
+        document.getElementById('extrator-resultado-box').classList.remove('hidden');
+        document.getElementById('extrator-resumo-contexto').innerText = data.resumo_contexto || '';
+        document.getElementById('extrator-badge-total').innerText = `${extratorEventosTemporarios.length} evento(s) detectado(s)`;
+
+        // Popula Tabela
+        const tbody = document.getElementById('extrator-tabela-body');
+        tbody.innerHTML = extratorEventosTemporarios.map(ev => {
+          const [ano, mes, dia] = (ev.data_iso || '').split('-');
+          const dataFmt = (dia && mes && ano) ? `${dia}/${mes}/${ano}` : ev.data_iso;
+          return `
+            <tr class="hover:bg-slate-950/60 transition">
+              <td class="py-2.5 px-3 font-semibold text-white whitespace-nowrap">📅 ${dataFmt}</td>
+              <td class="py-2.5 px-3 font-mono text-cyan-400 whitespace-nowrap">⏰ ${ev.horario || '08:00'}</td>
+              <td class="py-2.5 px-3 text-slate-200">${ev.descricao}</td>
+              <td class="py-2.5 px-3">
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-slate-800 text-purple-300 border border-slate-700">
+                  ${ev.categoria || 'geral'}
+                </span>
+              </td>
+              <td class="py-2.5 px-3 text-right font-mono text-[11px] text-emerald-400 font-bold">
+                ${ev.confianca || 95}%
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        // Se a IA sugeriu alguma obra pelo nome no texto, pré-seleciona
+        if (data.obra_detectada) {
+          const matchObra = cacheObras.find(o =>
+            o.nome_obra.toLowerCase().includes(data.obra_detectada.toLowerCase()) ||
+            data.obra_detectada.toLowerCase().includes(o.nome_obra.toLowerCase())
+          );
+          if (matchObra) {
+            document.getElementById('extrator-select-obra').value = matchObra.obra_id;
+            document.getElementById('extrator-sugestao-obra-texto').innerHTML =
+              `💡 A IA detectou menção provável à obra: <strong class="text-white">${matchObra.nome_obra}</strong>.`;
+          }
+        }
+
+        Toast.fire({ icon: 'success', title: `${extratorEventosTemporarios.length} eventos extraídos com sucesso!` });
+      } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Erro', text: err.message || 'Falha na comunicação com o servidor.', background: '#0f172a', color: '#fff' });
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>✨ Processar com IA</span>';
+      }
+    }
+
+    async function confirmarAgendamentosLote() {
+      const select = document.getElementById('extrator-select-obra');
+      const obraId = select.value;
+      if (!obraId) {
+        Swal.fire({ icon: 'warning', title: 'Selecione a Obra', text: 'Por favor, indique a qual obra pertencem estes eventos.', background: '#0f172a', color: '#fff' });
+        return;
+      }
+
+      const btn = document.getElementById('btn-confirmar-lote');
+      btn.disabled = true;
+      btn.innerText = 'Gravando na Agenda...';
+
+      try {
+        const res = await fetch('/api/ai/confirmar-agendamentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            obra_id: obraId,
+            eventos: extratorEventosTemporarios,
+          }),
+        });
+
+        const json = await res.json();
+        if (json.sucesso) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Agendamentos Salvos!',
+            text: json.mensagem,
+            background: '#0f172a',
+            color: '#fff',
+          });
+
+          // Limpa formulário
+          document.getElementById('extrator-input-texto').value = '';
+          document.getElementById('extrator-resultado-box').classList.add('hidden');
+          extratorEventosTemporarios = [];
+
+          // Se estiver na aba de agenda daquela obra, recarrega
+          const selectAgenda = document.getElementById('select-obra-agenda');
+          if (selectAgenda.value === obraId) {
+            carregarAgendamentosObra();
+          }
+        } else {
+          throw new Error(json.error || 'Erro ao salvar agendamentos.');
+        }
+      } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Erro ao Salvar', text: err.message, background: '#0f172a', color: '#fff' });
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Salvar na Agenda';
+      }
+    }
+
+    // ==============================================================================
+    // LÓGICA DO LABORATÓRIO DE ENGENHARIA DE SOLUÇÕES (PROMPT & TICKET IDE)
+    // ==============================================================================
+    let ultimoPromptGerado = '';
+
+    async function gerarPromptEngenharia() {
+      const descricao = document.getElementById('eng-input-descricao').value;
+      if (!descricao.trim()) {
+        Swal.fire({ icon: 'warning', title: 'Campo Vazio', text: 'Descreva a necessidade funcional que deseja desenvolver.', background: '#0f172a', color: '#fff' });
+        return;
+      }
+
+      const btn = document.getElementById('btn-gerar-prompt-eng');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Arquitetando Solução Técnica...</span>';
+
+      try {
+        const res = await fetch('/api/ai/engenharia-solucoes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ descricao }),
+        });
+
+        const json = await res.json();
+        if (!json.sucesso || !json.solucao) {
+          throw new Error(json.error || 'Erro ao gerar especificação técnica.');
+        }
+
+        const sol = json.solucao;
+        ultimoPromptGerado = sol.prompt_ide;
+
+        document.getElementById('eng-resultado-box').classList.remove('hidden');
+        document.getElementById('eng-ticket-badge').innerText = sol.ticket_id;
+        document.getElementById('eng-titulo-demanda').innerText = sol.titulo_demanda;
+        document.getElementById('eng-resumo-executivo').innerText = sol.resumo_executivo;
+
+        // Tags de Arquivos Afetados
+        const tagsContainer = document.getElementById('eng-arquivos-tags');
+        const arquivos = sol.especificacao_tecnica?.arquivos_afetados || [];
+        tagsContainer.innerHTML = arquivos.map(arq =>
+          `<span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[11px] font-mono text-fuchsia-300">📄 ${arq}</span>`
+        ).join('');
+
+        // Prompt Formatado
+        document.getElementById('eng-prompt-pre').innerText = sol.prompt_ide;
+
+        Toast.fire({ icon: 'success', title: `Ticket ${sol.ticket_id} gerado!` });
+      } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Erro de Arquitetura', text: err.message, background: '#0f172a', color: '#fff' });
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🚀 Gerar Ticket & Prompt</span>';
+      }
+    }
+
+    function copiarPromptIDE() {
+      if (!ultimoPromptGerado) return;
+      navigator.clipboard.writeText(ultimoPromptGerado).then(() => {
+        Toast.fire({ icon: 'success', title: 'Prompt copiado para a área de transferência!' });
+      }).catch(() => {
+        Toast.fire({ icon: 'error', title: 'Falha ao copiar prompt.' });
+      });
     }
 
     async function pollStatus() {
